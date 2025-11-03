@@ -64,7 +64,44 @@ class User extends Authenticatable
     public function hasRole(string|UserRole $role): bool
     {
         $value = $role instanceof UserRole ? $role->value : $role;
-        return $this->role === $value;
+        return $this->role->value === $value;
+    }
+
+    /**
+     * Check if user has any of the given roles
+     */
+    public function hasAnyRole(array $roles): bool
+    {
+        foreach ($roles as $role) {
+            if ($this->hasRole($role)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if user is admin
+     */
+    public function isAdmin(): bool
+    {
+        return $this->hasRole(UserRole::ADMIN);
+    }
+
+    /**
+     * Check if user is staff
+     */
+    public function isStaff(): bool
+    {
+        return $this->hasRole(UserRole::STAFF);
+    }
+
+    /**
+     * Check if user is admin or staff
+     */
+    public function isAdminOrStaff(): bool
+    {
+        return $this->hasAnyRole([UserRole::ADMIN, UserRole::STAFF]);
     }
 
     /**
@@ -72,6 +109,14 @@ class User extends Authenticatable
      */
     public function isActive(): bool
     {
-        return $this->status === UserStatus::ACTIVE->value;
+        return $this->status === UserStatus::ACTIVE;
+    }
+
+    /**
+     * Check if user is banned
+     */
+    public function isBanned(): bool
+    {
+        return $this->status === UserStatus::BANNED;
     }
 }
