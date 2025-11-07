@@ -101,11 +101,11 @@ class Device extends Model
     }
 
     /**
-     * Check if device is a billboard
+     * Check if device is a billiard
      */
-    public function isBillboard(): bool
+    public function isBilliard(): bool
     {
-        return $this->device_type->isBillboard();
+        return $this->device_type->isBilliard();
     }
 
     /**
@@ -159,10 +159,10 @@ class Device extends Model
     }
 
     /**
-     * Scope: Get billboards
+     * Scope: Get billiards
      */
-    public function scopeBillboards($query)
+    public function scopeBilliards($query)
     {
-        return $query->where('device_type', DeviceType::BILLBOARD->value);
+        return $query->where('device_type', DeviceType::BILLIARD->value);
     }
 }

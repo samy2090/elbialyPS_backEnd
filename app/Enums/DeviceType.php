@@ -6,14 +6,14 @@ enum DeviceType: string
 {
     case PS4 = 'ps4';
     case PS5 = 'ps5';
-    case BILLBOARD = 'billboard';
+    case BILLIARD = 'billiard';
 
     public function label(): string
     {
         return match ($this) {
             self::PS4 => 'PlayStation 4',
             self::PS5 => 'PlayStation 5',
-            self::BILLBOARD => 'Billboard',
+            self::BILLIARD => 'Billiard',
         };
     }
 
@@ -22,7 +22,7 @@ enum DeviceType: string
         return match ($this) {
             self::PS4 => 'blue',
             self::PS5 => 'purple',
-            self::BILLBOARD => 'green',
+            self::BILLIARD => 'green',
         };
     }
 
@@ -43,8 +43,8 @@ enum DeviceType: string
         return in_array($this, [self::PS4, self::PS5]);
     }
 
-    public function isBillboard(): bool
+    public function isBilliard(): bool
     {
-        return $this === self::BILLBOARD;
+        return $this === self::BILLIARD;
     }
 }

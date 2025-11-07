@@ -54,18 +54,18 @@ class DeviceSeeder extends Seeder
                 'notes' => 'Latest games collection',
             ],
             [
-                'name' => 'Digital Billboard Screen #1',
-                'description' => 'Large LED display for advertising and presentations',
-                'device_type' => DeviceType::BILLBOARD->value,
+                'name' => 'Digital Billiard Table #1',
+                'description' => 'Professional billiard table for gaming',
+                'device_type' => DeviceType::BILLIARD->value,
                 'status' => DeviceStatus::AVAILABLE->value,
                 'price_per_hour' => 15000, // 150.00
                 'multi_price' => 100000, // 1000.00 for extended periods
                 'notes' => 'High resolution, weather resistant',
             ],
             [
-                'name' => 'Digital Billboard Screen #2',
-                'description' => 'Premium location billboard with high visibility',
-                'device_type' => DeviceType::BILLBOARD->value,
+                'name' => 'Digital Billiard Table #2',
+                'description' => 'Premium billiard table with high-quality accessories',
+                'device_type' => DeviceType::BILLIARD->value,
                 'status' => DeviceStatus::MAINTENANCE->value,
                 'price_per_hour' => 20000, // 200.00
                 'multi_price' => 120000, // 1200.00
@@ -80,11 +80,11 @@ class DeviceSeeder extends Seeder
         // Create additional random devices using the factory
         Device::factory()->ps4()->available()->count(3)->create();
         Device::factory()->ps5()->available()->count(2)->create();
-        Device::factory()->billboard()->available()->count(2)->create();
+        Device::factory()->billiard()->available()->count(2)->create();
         
         // Create some devices in different states
         Device::factory()->ps4()->inUse()->count(1)->create();
         Device::factory()->ps5()->maintenance()->count(1)->create();
-        Device::factory()->billboard()->inUse()->count(1)->create();
+        Device::factory()->billiard()->inUse()->count(1)->create();
     }
 }

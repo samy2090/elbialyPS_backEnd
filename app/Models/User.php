@@ -30,6 +30,8 @@ class User extends Authenticatable
         'role',
         'status',
         'last_login_at',
+        'created_by',
+        'updated_by',
     ];
 
     /**
@@ -56,6 +58,38 @@ class User extends Authenticatable
             'role' => UserRole::class,
             'status' => UserStatus::class,
         ];
+    }
+
+    /**
+     * Get the user who created this user
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Get the user who last updated this user
+     */
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * Get the users created by this user
+     */
+    public function createdUsers()
+    {
+        return $this->hasMany(User::class, 'created_by');
+    }
+
+    /**
+     * Get the users updated by this user
+     */
+    public function updatedUsers()
+    {
+        return $this->hasMany(User::class, 'updated_by');
     }
 
     /**

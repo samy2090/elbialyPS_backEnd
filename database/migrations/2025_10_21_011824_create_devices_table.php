@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->text('description')->nullable();
-            $table->enum('device_type', ['ps4', 'ps5', 'billboard']);
+            $table->enum('device_type', ['ps4', 'ps5', 'billiard']);
             $table->enum('status', ['available', 'in_use', 'maintenance'])->default('available');
             $table->integer('price_per_hour');
             $table->integer('multi_price')->nullable();

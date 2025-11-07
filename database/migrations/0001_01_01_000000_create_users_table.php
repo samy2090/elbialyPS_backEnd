@@ -23,6 +23,8 @@ return new class extends Migration
             $table->enum('role', ['guest', 'customer', 'admin', 'staff'])->default('customer');
             $table->enum('status', ['active', 'inactive', 'banned'])->default('active');
             $table->timestamp('last_login_at')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
             $table->rememberToken();
             $table->timestamps();
             $table->softDeletes();

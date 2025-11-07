@@ -47,7 +47,7 @@ class DeviceFactory extends Factory
         return match ($type) {
             DeviceType::PS4 => 'PlayStation 4 #' . $this->faker->numberBetween(1, 10),
             DeviceType::PS5 => 'PlayStation 5 #' . $this->faker->numberBetween(1, 5),
-            DeviceType::BILLBOARD => 'Billboard #' . $this->faker->numberBetween(1, 20),
+            DeviceType::BILLIARD => 'Billiard #' . $this->faker->numberBetween(1, 20),
         };
     }
 
@@ -104,13 +104,13 @@ class DeviceFactory extends Factory
     }
 
     /**
-     * Indicate that the device is a billboard.
+     * Indicate that the device is a billiard.
      */
-    public function billboard(): static
+    public function billiard(): static
     {
         return $this->state(fn (array $attributes) => [
-            'device_type' => DeviceType::BILLBOARD->value,
-            'name' => 'Billboard #' . $this->faker->numberBetween(1, 20),
+            'device_type' => DeviceType::BILLIARD->value,
+            'name' => 'Billiard #' . $this->faker->numberBetween(1, 20),
         ]);
     }
 }

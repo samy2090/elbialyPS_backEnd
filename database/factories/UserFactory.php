@@ -25,10 +25,15 @@ class UserFactory extends Factory
     {
         return [
             'name' => fake()->name(),
+            'username' => fake()->unique()->userName(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'phone' => fake()->phoneNumber(),
+            'role' => 'customer',
+            'status' => 'active',
             'remember_token' => Str::random(10),
+            // created_by and updated_by will be set when needed
         ];
     }
 
