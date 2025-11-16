@@ -39,13 +39,16 @@ class AuthService implements AuthServiceInterface
         // Ensure username is unique
         $username = $this->ensureUniqueUsername($username);
 
+        // Get the customer role
+        $customerRole = \App\Models\Role::where('name', 'customer')->first();
+        
         $userData = [
             'name' => $data['name'],
             'username' => $username,
             'email' => $data['email'] ?? null,
             'password' => Hash::make($data['password']),
             'phone' => $data['phone'],
-            'role' => UserRole::CUSTOMER->value, // Default role
+            'role_id' => $customerRole?->id, // Default role is customer
             'status' => UserStatus::ACTIVE->value, // Default status
         ];
 

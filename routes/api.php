@@ -6,6 +6,9 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\SessionController;
+use App\Http\Controllers\SessionUserController;
+use App\Http\Controllers\SessionActivityController;
 
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
@@ -66,5 +69,64 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [ProductController::class, 'store']); // Create product
         Route::put('/{id}', [ProductController::class, 'update']); // Update product
         Route::delete('/{id}', [ProductController::class, 'destroy']); // Delete product
+    });
+
+    // Session management routes with role-based access control
+    Route::prefix('sessions')->group(function () {
+        // Routes accessible by both Admin and Staff (read-only for staff)
+        Route::middleware('admin_or_staff')->group(function () {
+            Route::get('/', [SessionController::class, 'index']); // List sessions
+            Route::get('/{id}', [SessionController::class, 'show']); // Show single session
+            Route::get('/customer/{customerId}', [SessionController::class, 'getByCustomer']); // Get customer sessions
+            Route::get('/status/{status}', [SessionController::class, 'getByStatus']); // Get sessions by status
+        });
+        
+        // Routes accessible only by Admin (full CRUD operations)
+        Route::middleware('admin')->group(function () {
+            Route::post('/', [SessionController::class, 'store']); // Create session
+            Route::put('/{id}', [SessionController::class, 'update']); // Update session
+            Route::patch('/{id}', [SessionController::class, 'update']); // Partial update session
+            Route::delete('/{id}', [SessionController::class, 'destroy']); // Delete session
+        });
+
+        // Status management routes accessible by both Admin and Staff
+        Route::middleware('admin_or_staff')->group(function () {
+            Route::patch('/{id}/end', [SessionController::class, 'end']); // End session
+            Route::patch('/{id}/pause', [SessionController::class, 'pause']); // Pause session
+            Route::patch('/{id}/resume', [SessionController::class, 'resume']); // Resume session
+        });
+    });
+
+    // Session Users management routes
+    Route::prefix('sessions/{sessionId}/users')->middleware('admin_or_staff')->group(function () {
+        Route::get('/', [SessionUserController::class, 'index']); // List users in session
+        Route::get('/{id}', [SessionUserController::class, 'show']); // Show specific session user
+        
+        Route::middleware('admin')->group(function () {
+            Route::post('/', [SessionUserController::class, 'store']); // Add user to session
+            Route::put('/{id}', [SessionUserController::class, 'update']); // Update session user
+            Route::delete('/{id}', [SessionUserController::class, 'destroy']); // Remove user from session
+            Route::patch('/{userId}/set-payer', [SessionUserController::class, 'setPayer']); // Set user as payer
+        });
+    });
+
+    // Session Activities management routes
+    Route::prefix('sessions/{sessionId}/activities')->middleware('admin_or_staff')->group(function () {
+        Route::get('/', [SessionActivityController::class, 'index']); // List activities in session
+        Route::get('/{id}', [SessionActivityController::class, 'show']); // Show specific activity
+        Route::get('/type/{type}', [SessionActivityController::class, 'getByType']); // Get activities by type
+        
+        Route::middleware('admin')->group(function () {
+            Route::post('/', [SessionActivityController::class, 'store']); // Create activity
+            Route::put('/{id}', [SessionActivityController::class, 'update']); // Update activity
+            Route::patch('/{id}', [SessionActivityController::class, 'update']); // Partial update activity
+            Route::delete('/{id}', [SessionActivityController::class, 'destroy']); // Delete activity
+        });
+
+        // Activity status management routes accessible by both Admin and Staff
+        Route::middleware('admin_or_staff')->group(function () {
+            Route::patch('/{id}/end', [SessionActivityController::class, 'end']); // End activity
+            Route::patch('/{id}/calculate-duration', [SessionActivityController::class, 'calculateDuration']); // Calculate duration
+        });
     });
 });

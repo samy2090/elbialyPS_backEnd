@@ -19,6 +19,16 @@ enum UserRole: string
         };
     }
 
+    public function color(): string
+    {
+        return match ($this) {
+            self::ADMIN => 'red',
+            self::STAFF => 'blue',
+            self::CUSTOMER => 'green',
+            self::GUEST => 'gray',
+        };
+    }
+
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
@@ -29,5 +39,25 @@ enum UserRole: string
         return collect(self::cases())
             ->mapWithKeys(fn($case) => [$case->value => $case->label()])
             ->toArray();
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this === self::ADMIN;
+    }
+
+    public function isStaff(): bool
+    {
+        return $this === self::STAFF;
+    }
+
+    public function isCustomer(): bool
+    {
+        return $this === self::CUSTOMER;
+    }
+
+    public function isGuest(): bool
+    {
+        return $this === self::GUEST;
     }
 }

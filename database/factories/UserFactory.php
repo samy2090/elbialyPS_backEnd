@@ -23,6 +23,8 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        $customerRole = \App\Models\Role::where('name', 'customer')->firstOrCreate(['name' => 'customer']);
+
         return [
             'name' => fake()->name(),
             'username' => fake()->unique()->userName(),
@@ -30,7 +32,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'phone' => fake()->phoneNumber(),
-            'role' => 'customer',
+            'role_id' => $customerRole->id,
             'status' => 'active',
             'remember_token' => Str::random(10),
             // created_by and updated_by will be set when needed

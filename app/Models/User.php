@@ -3,7 +3,6 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -27,7 +26,7 @@ class User extends Authenticatable
         'email',
         'password',
         'phone',
-        'role',
+        'role_id',
         'status',
         'last_login_at',
         'created_by',
@@ -55,9 +54,16 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
             'password' => 'hashed',
-            'role' => UserRole::class,
             'status' => UserStatus::class,
         ];
+    }
+
+    /**
+     * Get the role that owns the user
+     */
+    public function role()
+    {
+        return $this->belongsTo(Role::class);
     }
 
     /**
@@ -95,23 +101,59 @@ class User extends Authenticatable
     /**
      * Check if user has given role
      */
-    public function hasRole(string|UserRole $role): bool
+    public function hasRole(string $roleName): bool
     {
-        $value = $role instanceof UserRole ? $role->value : $role;
-        return $this->role->value === $value;
+        return $this->role && $this->role->name === $roleName;
     }
 
     /**
      * Check if user has any of the given roles
      */
-    public function hasAnyRole(array $roles): bool
+    public function hasAnyRole(array $roleNames): bool
     {
-        foreach ($roles as $role) {
-            if ($this->hasRole($role)) {
-                return true;
-            }
+        return $this->role && in_array($this->role->name, $roleNames);
+    }
+
+    /**
+     * Check if user has specific permission
+     */
+    public function hasPermission(string $resource, string $action): bool
+    {
+        if (!$this->role || !is_array($this->role->permissions)) {
+            return false;
         }
-        return false;
+
+        $permissions = $this->role->permissions;
+        return isset($permissions[$resource]) && in_array($action, $permissions[$resource]);
+    }
+
+    /**
+     * Check if user has any of the specified permissions for a resource
+     */
+    public function hasAnyPermission(string $resource, array $actions): bool
+    {
+        if (!$this->role || !is_array($this->role->permissions)) {
+            return false;
+        }
+
+        $permissions = $this->role->permissions;
+        if (!isset($permissions[$resource])) {
+            return false;
+        }
+
+        return !empty(array_intersect($actions, $permissions[$resource]));
+    }
+
+    /**
+     * Get all permissions for a specific resource
+     */
+    public function getPermissionsFor(string $resource): array
+    {
+        if (!$this->role || !is_array($this->role->permissions)) {
+            return [];
+        }
+
+        return $this->role->permissions[$resource] ?? [];
     }
 
     /**
@@ -119,7 +161,7 @@ class User extends Authenticatable
      */
     public function isAdmin(): bool
     {
-        return $this->hasRole(UserRole::ADMIN);
+        return $this->hasRole('admin');
     }
 
     /**
@@ -127,7 +169,7 @@ class User extends Authenticatable
      */
     public function isStaff(): bool
     {
-        return $this->hasRole(UserRole::STAFF);
+        return $this->hasRole('staff');
     }
 
     /**
@@ -135,7 +177,7 @@ class User extends Authenticatable
      */
     public function isAdminOrStaff(): bool
     {
-        return $this->hasAnyRole([UserRole::ADMIN, UserRole::STAFF]);
+        return $this->hasAnyRole(['admin', 'staff']);
     }
 
     /**

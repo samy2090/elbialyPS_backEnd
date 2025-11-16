@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
@@ -33,7 +32,7 @@ class UpdateUserRequest extends FormRequest
             'email' => ['sometimes', 'required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
             'password' => ['sometimes', 'confirmed', Password::defaults()],
             'phone' => ['sometimes', 'required', 'string', 'max:20'],
-            'role' => ['sometimes', 'required', Rule::in(UserRole::values())],
+            'role_id' => ['sometimes', 'required', 'integer', 'exists:roles,id'],
             'status' => ['sometimes', 'required', Rule::in(UserStatus::values())],
             'avatar' => ['nullable', 'string', 'max:255'],
         ];
@@ -55,8 +54,8 @@ class UpdateUserRequest extends FormRequest
             'email.unique' => 'This email is already registered.',
             'password.confirmed' => 'The password confirmation does not match.',
             'phone.required' => 'The phone field is required.',
-            'role.required' => 'The role field is required.',
-            'role.in' => 'The selected role is invalid.',
+            'role_id.required' => 'The role field is required.',
+            'role_id.exists' => 'The selected role is invalid.',
             'status.required' => 'The status field is required.',
             'status.in' => 'The selected status is invalid.',
         ];

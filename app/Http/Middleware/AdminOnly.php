@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-use App\Enums\UserRole;
+
 
 class AdminOnly
 {
@@ -23,7 +23,7 @@ class AdminOnly
             ], 401);
         }
 
-        if (!$request->user()->hasRole(UserRole::ADMIN)) {
+        if (!$request->user()->hasRole('admin')) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Access denied. Admin privileges required.'

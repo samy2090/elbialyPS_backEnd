@@ -164,7 +164,7 @@ class UserController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => [
-                'roles' => UserRole::options(),
+                'roles' => \App\Models\Role::pluck('name', 'id')->toArray(),
                 'statuses' => UserStatus::options()
             ]
         ]);

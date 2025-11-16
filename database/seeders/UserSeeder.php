@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Enums\UserRole;
 use App\Enums\UserStatus;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -15,6 +15,11 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
+        $adminRole = Role::where('name', 'admin')->first();
+        $staffRole = Role::where('name', 'staff')->first();
+        $customerRole = Role::where('name', 'customer')->first();
+        $guestRole = Role::where('name', 'guest')->first();
+
         // Admin user
         User::create([
             'name' => 'Admin User',
@@ -22,7 +27,7 @@ class UserSeeder extends Seeder
             'email' => 'admin@admin.com',
             'phone' => '01207889825',
             'password' => Hash::make('admin'),
-            'role' => UserRole::ADMIN->value,
+            'role_id' => $adminRole->id,
             'status' => UserStatus::ACTIVE->value,
             'email_verified_at' => now(),
         ]);
@@ -34,7 +39,7 @@ class UserSeeder extends Seeder
             'email' => 'staff1@example.com',
             'phone' => '01234567890',
             'password' => Hash::make('password123'),
-            'role' => UserRole::STAFF->value,
+            'role_id' => $staffRole->id,
             'status' => UserStatus::ACTIVE->value,
         ]);
 
@@ -44,7 +49,7 @@ class UserSeeder extends Seeder
             'email' => 'staff2@example.com',
             'phone' => '01234567891',
             'password' => Hash::make('password123'),
-            'role' => UserRole::STAFF->value,
+            'role_id' => $staffRole->id,
             'status' => UserStatus::ACTIVE->value,
         ]);
 
@@ -55,7 +60,7 @@ class UserSeeder extends Seeder
             'email' => 'john@customer.com',
             'phone' => '01111111111',
             'password' => Hash::make('password123'),
-            'role' => UserRole::CUSTOMER->value,
+            'role_id' => $customerRole->id,
             'status' => UserStatus::ACTIVE->value,
         ]);
 
@@ -65,7 +70,7 @@ class UserSeeder extends Seeder
             'email' => 'jane@customer.com',
             'phone' => '01222222222',
             'password' => Hash::make('password123'),
-            'role' => UserRole::CUSTOMER->value,
+            'role_id' => $customerRole->id,
             'status' => UserStatus::ACTIVE->value,
         ]);
 
@@ -76,7 +81,7 @@ class UserSeeder extends Seeder
             'email' => 'guest1@example.com',
             'phone' => '01333333333',
             'password' => Hash::make('password123'),
-            'role' => UserRole::GUEST->value,
+            'role_id' => $guestRole->id,
             'status' => UserStatus::ACTIVE->value,
         ]);
 
@@ -86,7 +91,7 @@ class UserSeeder extends Seeder
             'email' => 'guest2@example.com',
             'phone' => '01444444444',
             'password' => Hash::make('password123'),
-            'role' => UserRole::GUEST->value,
+            'role_id' => $guestRole->id,
             'status' => UserStatus::ACTIVE->value,
         ]);
     }

@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-use App\Enums\UserRole;
 
 class AdminOrStaff
 {
@@ -25,7 +24,7 @@ class AdminOrStaff
 
         $user = $request->user();
         
-        if (!$user->hasRole(UserRole::ADMIN) && !$user->hasRole(UserRole::STAFF)) {
+        if (!$user->hasRole('admin') && !$user->hasRole('staff')) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Access denied. Admin or Staff privileges required.'
