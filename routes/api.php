@@ -7,7 +7,6 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SessionController;
-use App\Http\Controllers\SessionUserController;
 use App\Http\Controllers\SessionActivityController;
 
 Route::post('register', [AuthController::class, 'register']);
@@ -77,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::middleware('admin_or_staff')->group(function () {
             Route::get('/', [SessionController::class, 'index']); // List sessions
             Route::get('/{id}', [SessionController::class, 'show']); // Show single session
+            Route::get('/{id}/users', [SessionController::class, 'getSessionUsers']); // Get users in session
             Route::get('/customer/{customerId}', [SessionController::class, 'getByCustomer']); // Get customer sessions
             Route::get('/status/{status}', [SessionController::class, 'getByStatus']); // Get sessions by status
         });
@@ -97,19 +97,6 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     });
 
-    // Session Users management routes
-    Route::prefix('sessions/{sessionId}/users')->middleware('admin_or_staff')->group(function () {
-        Route::get('/', [SessionUserController::class, 'index']); // List users in session
-        Route::get('/{id}', [SessionUserController::class, 'show']); // Show specific session user
-        
-        Route::middleware('admin')->group(function () {
-            Route::post('/', [SessionUserController::class, 'store']); // Add user to session
-            Route::put('/{id}', [SessionUserController::class, 'update']); // Update session user
-            Route::delete('/{id}', [SessionUserController::class, 'destroy']); // Remove user from session
-            Route::patch('/{userId}/set-payer', [SessionUserController::class, 'setPayer']); // Set user as payer
-        });
-    });
-
     // Session Activities management routes
     Route::prefix('sessions/{sessionId}/activities')->middleware('admin_or_staff')->group(function () {
         Route::get('/', [SessionActivityController::class, 'index']); // List activities in session
@@ -127,6 +114,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::middleware('admin_or_staff')->group(function () {
             Route::patch('/{id}/end', [SessionActivityController::class, 'end']); // End activity
             Route::patch('/{id}/calculate-duration', [SessionActivityController::class, 'calculateDuration']); // Calculate duration
+        });
+
+        // Activity users management routes
+        Route::prefix('{activityId}/users')->middleware('admin')->group(function () {
+            Route::post('/', [SessionActivityController::class, 'addUser']); // Add user to activity
+            Route::delete('/{userId}', [SessionActivityController::class, 'removeUser']); // Remove user from activity
         });
     });
 });
