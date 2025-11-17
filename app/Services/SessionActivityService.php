@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SessionActivity;
+use App\Models\ActivityUser;
 use App\Repositories\SessionActivityRepositoryInterface;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -66,5 +67,34 @@ class SessionActivityService
             'duration_hours' => $duration,
             'total_price' => $totalPrice,
         ]);
+    }
+
+    /**
+     * Add a user to a session activity
+     */
+    public function addUserToActivity(int $activityId, array $data): ActivityUser
+    {
+        $data['session_activity_id'] = $activityId;
+        return ActivityUser::create($data);
+    }
+
+    /**
+     * Remove a user from a session activity
+     */
+    public function removeUserFromActivity(int $activityId, int $userId): bool
+    {
+        return ActivityUser::where('session_activity_id', $activityId)
+            ->where('user_id', $userId)
+            ->delete() > 0;
+    }
+
+    /**
+     * Get users in an activity
+     */
+    public function getActivityUsers(int $activityId): Collection
+    {
+        return ActivityUser::where('session_activity_id', $activityId)
+            ->with('user')
+            ->get();
     }
 }

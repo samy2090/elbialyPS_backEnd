@@ -113,4 +113,33 @@ class SessionActivityController extends Controller
 
         return response()->json(['message' => 'Duration calculated successfully']);
     }
+
+    /**
+     * Add a user to an activity.
+     */
+    public function addUser(int $sessionId, int $activityId, \Illuminate\Http\Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'duration_hours' => 'nullable|numeric|min:0',
+            'cost_share' => 'nullable|numeric|min:0',
+        ]);
+
+        $activityUser = $this->sessionActivityService->addUserToActivity($activityId, $validated);
+        return response()->json($activityUser, Response::HTTP_CREATED);
+    }
+
+    /**
+     * Remove a user from an activity.
+     */
+    public function removeUser(int $sessionId, int $activityId, int $userId): JsonResponse
+    {
+        $success = $this->sessionActivityService->removeUserFromActivity($activityId, $userId);
+        
+        if (!$success) {
+            return response()->json(['message' => 'Activity or user not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json(['message' => 'User removed from activity']);
+    }
 }

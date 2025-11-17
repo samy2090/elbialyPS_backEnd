@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('game_sessions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('created_by')->constrained('users')->onDelete('cascade'); 
-            $table->foreignId('customer_id')->nullable()->constrained('users')->onDelete('set null'); 
+            $table->foreignId('customer_id')->constrained('users')->onDelete('cascade'); 
             $table->timestamp('started_at')->nullable();
             $table->timestamp('ended_at')->nullable();
             $table->enum('status', ['active', 'paused', 'ended'])->default('active');

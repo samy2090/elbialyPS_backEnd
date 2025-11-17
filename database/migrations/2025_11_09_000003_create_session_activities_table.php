@@ -12,10 +12,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('session_id')->constrained('game_sessions')->onDelete('cascade');
             $table->enum('activity_type', ['device_use', 'pause'])->default('device_use');
-            $table->foreignId('device_id')->nullable()->constrained('devices')->onDelete('set null');
+            $table->foreignId('device_id')->constrained('devices')->onDelete('restrict');
             $table->enum('mode', ['single', 'multi'])->default('single');
-            $table->timestamp('started_at')->nullable();
+            $table->timestamp('started_at');
             $table->timestamp('ended_at')->nullable();
+            $table->enum('status', ['active', 'paused', 'ended'])->default('active');
             $table->decimal('duration_hours', 5, 2)->nullable();
             $table->decimal('price_per_hour', 8, 2)->nullable();
             $table->decimal('total_price', 10, 2)->default(0);

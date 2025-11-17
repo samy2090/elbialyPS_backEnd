@@ -136,4 +136,19 @@ class SessionController extends Controller
 
         return response()->json(['message' => 'Session resumed successfully']);
     }
+
+    /**
+     * Get all users in a session (from all activities).
+     */
+    public function getSessionUsers(int $id): JsonResponse
+    {
+        $session = $this->sessionService->getSession($id);
+        
+        if (!$session) {
+            return response()->json(['message' => 'Session not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $users = $session->getSessionUsers();
+        return response()->json($users);
+    }
 }

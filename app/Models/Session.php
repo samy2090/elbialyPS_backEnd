@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Session extends Model
 {
@@ -22,6 +23,7 @@ class Session extends Model
         'status',
         'total_price',
         'discount',
+        'updated_by',
     ];
 
     protected $casts = [
@@ -59,19 +61,41 @@ class Session extends Model
     }
 
     /**
-     * Get all users in this session
-     */
-    public function sessionUsers(): HasMany
-    {
-        return $this->hasMany(SessionUser::class);
-    }
-
-    /**
      * Get all activities in this session
      */
     public function activities(): HasMany
     {
         return $this->hasMany(SessionActivity::class);
+    }
+
+    /**
+     * Get all users in this session through activities (HasManyThrough relation)
+     */
+    public function sessionUsers()
+    {
+        return $this->hasManyThrough(
+            ActivityUser::class,
+            SessionActivity::class,
+            'session_id',      // Foreign key on session_activities table
+            'session_activity_id',  // Foreign key on activity_user table
+            'id',             // Local key on sessions table
+            'id'              // Local key on session_activities table
+        );
+    }
+
+    /**
+     * Get all unique users in this session (collection of User objects)
+     */
+    public function getSessionUsers()
+    {
+        return $this->sessionUsers()
+            ->with('user')
+            ->get()
+            ->groupBy('user_id')
+            ->map(function ($group) {
+                return $group->first();
+            })
+            ->values();
     }
 
     /**

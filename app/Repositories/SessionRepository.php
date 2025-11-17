@@ -9,13 +9,13 @@ class SessionRepository implements SessionRepositoryInterface
 {
     public function getAllPaginated(int $perPage = 10): LengthAwarePaginator
     {
-        return Session::with(['creator', 'customer', 'sessionUsers', 'activities'])
+        return Session::with(['creator', 'customer', 'activities.activityUsers.user'])
             ->paginate($perPage);
     }
 
     public function getById(int $id): ?Session
     {
-        return Session::with(['creator', 'customer', 'sessionUsers', 'activities'])
+        return Session::with(['creator', 'customer', 'activities.activityUsers.user'])
             ->find($id);
     }
 
@@ -37,14 +37,14 @@ class SessionRepository implements SessionRepositoryInterface
     public function getByCustomerId(int $customerId, int $perPage = 10): LengthAwarePaginator
     {
         return Session::where('customer_id', $customerId)
-            ->with(['creator', 'customer', 'sessionUsers', 'activities'])
+            ->with(['creator', 'customer', 'activities.activityUsers.user'])
             ->paginate($perPage);
     }
 
     public function getByStatus(string $status, int $perPage = 10): LengthAwarePaginator
     {
         return Session::where('status', $status)
-            ->with(['creator', 'customer', 'sessionUsers', 'activities'])
+            ->with(['creator', 'customer', 'activities.activityUsers.user'])
             ->paginate($perPage);
     }
 }

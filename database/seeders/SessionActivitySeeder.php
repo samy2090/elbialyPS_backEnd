@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\ActivityType;
 use App\Enums\ActivityMode;
+use App\Enums\SessionStatus;
 use App\Models\Device;
 use App\Models\Session;
 use App\Models\SessionActivity;
@@ -41,6 +42,7 @@ class SessionActivitySeeder extends Seeder
                 'mode' => $index % 2 == 0 ? ActivityMode::SINGLE->value : ActivityMode::MULTI->value,
                 'started_at' => $session->started_at,
                 'ended_at' => $session->status === 'ended' ? $session->ended_at : null,
+                'status' => $session->status,
                 'duration_hours' => $session->status === 'ended' ? 3.5 : null,
                 'price_per_hour' => 50.00,
                 'total_price' => $session->status === 'ended' ? 175.00 : 0,
@@ -57,6 +59,7 @@ class SessionActivitySeeder extends Seeder
                     'mode' => ActivityMode::SINGLE->value,
                     'started_at' => $session->ended_at,
                     'ended_at' => null,
+                    'status' => SessionStatus::PAUSED->value,
                     'duration_hours' => null,
                     'price_per_hour' => null,
                     'total_price' => 0,

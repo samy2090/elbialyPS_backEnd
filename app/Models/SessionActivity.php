@@ -5,10 +5,12 @@ namespace App\Models;
 use App\Enums\ActivityType;
 use App\Enums\ActivityMode;
 use App\Enums\DeviceStatus;
+use App\Enums\SessionStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class SessionActivity extends Model
 {
@@ -21,6 +23,7 @@ class SessionActivity extends Model
         'mode',
         'started_at',
         'ended_at',
+        'status',
         'duration_hours',
         'price_per_hour',
         'total_price',
@@ -36,6 +39,7 @@ class SessionActivity extends Model
         'total_price' => 'decimal:2',
         'activity_type' => ActivityType::class,
         'mode' => ActivityMode::class,
+        'status' => SessionStatus::class,
     ];
 
     protected $appends = ['device_name'];
@@ -134,6 +138,21 @@ class SessionActivity extends Model
     public function activityUsers(): HasMany
     {
         return $this->hasMany(ActivityUser::class, 'session_activity_id');
+    }
+
+    /**
+     * Get all users through activity_user for this activity
+     */
+    public function users()
+    {
+        return $this->hasManyThrough(
+            User::class,
+            ActivityUser::class,
+            'session_activity_id',
+            'id',
+            'id',
+            'user_id'
+        );
     }
 
     /**
