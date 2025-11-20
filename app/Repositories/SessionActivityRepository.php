@@ -28,7 +28,13 @@ class SessionActivityRepository implements SessionActivityRepositoryInterface
 
     public function update(int $id, array $data): bool
     {
-        return SessionActivity::where('id', $id)->update($data);
+        $activity = SessionActivity::find($id);
+        if (!$activity) {
+            return false;
+        }
+        
+        // Use model instance update to trigger model events
+        return $activity->update($data);
     }
 
     public function delete(int $id): bool

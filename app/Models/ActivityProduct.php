@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Session;
+use App\Models\SessionActivity;
 
 class ActivityProduct extends Model
 {
@@ -51,5 +53,46 @@ class ActivityProduct extends Model
     public function orderedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'ordered_by_user_id');
+    }
+
+    /**
+     * Boot the model
+     */
+    protected static function booted(): void
+    {
+        // When a product is created, recalculate session total
+        static::created(function (ActivityProduct $activityProduct) {
+            $activity = SessionActivity::find($activityProduct->session_activity_id);
+            if ($activity && $activity->session_id) {
+                $session = Session::find($activity->session_id);
+                if ($session) {
+                    $session->calculateTotalPrice();
+                }
+            }
+        });
+
+        // When a product is updated (especially total_price), recalculate session total
+        static::updated(function (ActivityProduct $activityProduct) {
+            if ($activityProduct->isDirty('total_price')) {
+                $activity = SessionActivity::find($activityProduct->session_activity_id);
+                if ($activity && $activity->session_id) {
+                    $session = Session::find($activity->session_id);
+                    if ($session) {
+                        $session->calculateTotalPrice();
+                    }
+                }
+            }
+        });
+
+        // When a product is deleted, recalculate session total
+        static::deleted(function (ActivityProduct $activityProduct) {
+            $activity = SessionActivity::find($activityProduct->session_activity_id);
+            if ($activity && $activity->session_id) {
+                $session = Session::find($activity->session_id);
+                if ($session) {
+                    $session->calculateTotalPrice();
+                }
+            }
+        });
     }
 }

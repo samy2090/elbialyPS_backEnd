@@ -8,11 +8,11 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::table('session_activities', function (Blueprint $table) {
-            // Add unique constraint: a device can only be in one active session activity
-            // This ensures no device can be used in multiple sessions simultaneously
-            $table->unique(['device_id'], 'unique_active_device_per_session');
-        });
+        // Note: We cannot use a simple unique constraint on device_id because:
+        // 1. device_id can be null (for chillout activities)
+        // 2. We only want uniqueness for active activities (not ended ones)
+        // Device uniqueness is enforced in application logic via SessionActivity model
+        // This migration is kept for backward compatibility but the constraint is not applied
     }
 
     public function down()

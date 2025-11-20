@@ -112,6 +112,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Activity status management routes accessible by both Admin and Staff
         Route::middleware('admin_or_staff')->group(function () {
+            Route::patch('/{id}/status', [SessionActivityController::class, 'updateStatus']); // Update activity status
             Route::patch('/{id}/end', [SessionActivityController::class, 'end']); // End activity
             Route::patch('/{id}/calculate-duration', [SessionActivityController::class, 'calculateDuration']); // Calculate duration
         });

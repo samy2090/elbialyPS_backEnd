@@ -6,11 +6,13 @@ use App\Enums\ActivityType;
 use App\Enums\ActivityMode;
 use App\Enums\DeviceStatus;
 use App\Enums\SessionStatus;
+use App\Enums\SessionType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use App\Models\Session;
 
 class SessionActivity extends Model
 {
@@ -18,6 +20,7 @@ class SessionActivity extends Model
 
     protected $fillable = [
         'session_id',
+        'type',
         'activity_type',
         'device_id',
         'mode',
@@ -37,6 +40,7 @@ class SessionActivity extends Model
         'duration_hours' => 'decimal:2',
         'price_per_hour' => 'decimal:2',
         'total_price' => 'decimal:2',
+        'type' => SessionType::class,
         'activity_type' => ActivityType::class,
         'mode' => ActivityMode::class,
         'status' => SessionStatus::class,
@@ -59,6 +63,7 @@ class SessionActivity extends Model
     {
         // When creating an activity with a device, mark it as in use
         static::creating(function (SessionActivity $activity) {
+            // Only validate and manage device if activity_type is device_use AND device_id is provided
             if ($activity->activity_type === ActivityType::DEVICE_USE && $activity->device_id) {
                 $device = Device::find($activity->device_id);
                 
@@ -83,7 +88,8 @@ class SessionActivity extends Model
 
         // When deleting an activity, free up the device
         static::deleting(function (SessionActivity $activity) {
-            if ($activity->device_id) {
+            // Only manage device if activity_type is device_use AND device_id is provided
+            if ($activity->activity_type === ActivityType::DEVICE_USE && $activity->device_id) {
                 $device = Device::find($activity->device_id);
                 
                 // Check if device has other active activities
@@ -95,6 +101,36 @@ class SessionActivity extends Model
                 // Only mark as AVAILABLE if no other activities are using it
                 if (!$hasOtherActiveActivities && $device) {
                     $device->update(['status' => DeviceStatus::AVAILABLE->value]);
+                }
+            }
+        });
+
+        // When an activity is created, recalculate session total
+        static::created(function (SessionActivity $activity) {
+            if ($activity->session_id) {
+                $session = Session::find($activity->session_id);
+                if ($session) {
+                    $session->calculateTotalPrice();
+                }
+            }
+        });
+
+        // When an activity is updated (especially total_price), recalculate session total
+        static::updated(function (SessionActivity $activity) {
+            if ($activity->session_id && $activity->isDirty('total_price')) {
+                $session = Session::find($activity->session_id);
+                if ($session) {
+                    $session->calculateTotalPrice();
+                }
+            }
+        });
+
+        // When an activity is deleted, recalculate session total
+        static::deleted(function (SessionActivity $activity) {
+            if ($activity->session_id) {
+                $session = Session::find($activity->session_id);
+                if ($session) {
+                    $session->calculateTotalPrice();
                 }
             }
         });
@@ -202,7 +238,7 @@ class SessionActivity extends Model
     {
         $this->update(['ended_at' => now()]);
         
-        // If activity is device_use, update device status back to AVAILABLE
+        // If activity is device_use and has device_id, update device status back to AVAILABLE
         if ($this->isDeviceUse() && $this->device_id) {
             $device = Device::find($this->device_id);
             

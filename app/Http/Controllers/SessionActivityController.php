@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CreateSessionActivityRequest;
 use App\Http\Requests\UpdateSessionActivityRequest;
+use App\Http\Requests\UpdateActivityStatusRequest;
 use App\Services\SessionActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
@@ -84,6 +85,23 @@ class SessionActivityController extends Controller
     {
         $activities = $this->sessionActivityService->getActivitiesByType($type);
         return response()->json($activities);
+    }
+
+    /**
+     * Update activity status.
+     */
+    public function updateStatus(int $sessionId, int $id, UpdateActivityStatusRequest $request): JsonResponse
+    {
+        $activity = $this->sessionActivityService->updateActivityStatus($id, $request->validated());
+        
+        if (!$activity) {
+            return response()->json(['message' => 'Activity not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json([
+            'message' => 'Activity status updated successfully',
+            'activity' => $activity
+        ]);
     }
 
     /**

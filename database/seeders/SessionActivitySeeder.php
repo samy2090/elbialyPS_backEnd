@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\ActivityType;
 use App\Enums\ActivityMode;
 use App\Enums\SessionStatus;
+use App\Enums\SessionType;
 use App\Models\Device;
 use App\Models\Session;
 use App\Models\SessionActivity;
@@ -37,6 +38,7 @@ class SessionActivitySeeder extends Seeder
             // Device use activity
             SessionActivity::create([
                 'session_id' => $session->id,
+                'type' => $session->type ?? SessionType::PLAYING->value,
                 'activity_type' => ActivityType::DEVICE_USE->value,
                 'device_id' => $device->id,
                 'mode' => $index % 2 == 0 ? ActivityMode::SINGLE->value : ActivityMode::MULTI->value,
@@ -54,6 +56,7 @@ class SessionActivitySeeder extends Seeder
             if ($session->status === 'ended') {
                 SessionActivity::create([
                     'session_id' => $session->id,
+                    'type' => $session->type ?? SessionType::PLAYING->value,
                     'activity_type' => ActivityType::PAUSE->value,
                     'device_id' => null,
                     'mode' => ActivityMode::SINGLE->value,

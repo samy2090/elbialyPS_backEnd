@@ -11,8 +11,9 @@ return new class extends Migration
         Schema::create('session_activities', function (Blueprint $table) {
             $table->id();
             $table->foreignId('session_id')->constrained('game_sessions')->onDelete('cascade');
+            $table->enum('type', ['playing', 'chillout'])->default('playing');
             $table->enum('activity_type', ['device_use', 'pause'])->default('device_use');
-            $table->foreignId('device_id')->constrained('devices')->onDelete('restrict');
+            $table->foreignId('device_id')->nullable()->constrained('devices')->onDelete('restrict');
             $table->enum('mode', ['single', 'multi'])->default('single');
             $table->timestamp('started_at');
             $table->timestamp('ended_at')->nullable();

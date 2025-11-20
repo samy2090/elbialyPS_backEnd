@@ -4,7 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\ActivityUser;
 use App\Models\SessionActivity;
-use App\Models\SessionUser;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class ActivityUserSeeder extends Seeder
@@ -17,19 +17,23 @@ class ActivityUserSeeder extends Seeder
         $activities = SessionActivity::where('activity_type', 'device_use')->get();
 
         foreach ($activities as $activity) {
-            // Get users in this session
-            $sessionUsers = SessionUser::where('session_id', $activity->session_id)
-                ->with('user')
-                ->get();
-
-            foreach ($sessionUsers as $sessionUser) {
-                ActivityUser::create([
+            // Get the session for this activity
+            $session = $activity->session;
+            
+            // Add the customer as a user to this activity
+            ActivityUser::firstOrCreate(
+                [
                     'session_activity_id' => $activity->id,
-                    'user_id' => $sessionUser->user_id,
-                    'duration_hours' => $activity->duration_hours ? $activity->duration_hours / $sessionUsers->count() : null,
-                    'cost_share' => $activity->total_price ? $activity->total_price / $sessionUsers->count() : null,
-                ]);
-            }
+                    'user_id' => $session->customer_id,
+                ],
+                [
+                    'duration_hours' => $activity->duration_hours,
+                    'cost_share' => $activity->total_price,
+                ]
+            );
+
+            // Optionally add additional users (staff or others) to activities
+            // This can be expanded based on your business logic
         }
     }
 }

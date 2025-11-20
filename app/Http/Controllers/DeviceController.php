@@ -254,18 +254,31 @@ class DeviceController extends Controller
     /**
      * Get available devices for booking.
      * Accessible by all authenticated users.
+     * 
+     * @param Request $request
+     * @return JsonResponse
      */
-    public function available(): JsonResponse
+    public function available(Request $request): JsonResponse
     {
-        $devices = Device::available()
-            ->select(['id', 'name', 'description', 'device_type', 'price_per_hour', 'multi_price'])
+        $query = Device::available();
+        
+        // Optional filter by device type
+        if ($request->has('device_type')) {
+            $query->where('device_type', $request->device_type);
+        }
+        
+        // Get devices with selected fields
+        $devices = $query
+            ->select(['id', 'name', 'description', 'device_type', 'status', 'price_per_hour', 'multi_price'])
             ->orderBy('device_type')
             ->orderBy('name')
             ->get();
         
         return response()->json([
             'status' => 'success',
-            'data' => $devices
+            'message' => 'Available devices retrieved successfully',
+            'data' => $devices,
+            'count' => $devices->count()
         ]);
     }
 }

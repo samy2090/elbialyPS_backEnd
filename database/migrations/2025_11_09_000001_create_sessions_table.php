@@ -15,6 +15,7 @@ return new class extends Migration
             $table->timestamp('started_at')->nullable();
             $table->timestamp('ended_at')->nullable();
             $table->enum('status', ['active', 'paused', 'ended'])->default('active');
+            $table->enum('type', ['playing', 'chillout'])->default('playing');
             $table->decimal('total_price', 10, 2)->default(0);
             $table->decimal('discount', 8, 2)->default(0);
             $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');

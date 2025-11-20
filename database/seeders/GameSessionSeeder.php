@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\SessionStatus;
+use App\Enums\SessionType;
 use App\Models\Session;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -27,6 +28,7 @@ class GameSessionSeeder extends Seeder
             'started_at' => now()->subHours(2),
             'ended_at' => null,
             'status' => SessionStatus::ACTIVE->value,
+            'type' => SessionType::PLAYING->value,
             'total_price' => 0,
             'discount' => 0,
             'updated_by' => $staff1->id,
@@ -39,6 +41,7 @@ class GameSessionSeeder extends Seeder
             'started_at' => now()->subHours(4),
             'ended_at' => null,
             'status' => SessionStatus::PAUSED->value,
+            'type' => SessionType::CHILLOUT->value,
             'total_price' => 150.00,
             'discount' => 10.00,
             'updated_by' => $staff2->id,
@@ -51,6 +54,7 @@ class GameSessionSeeder extends Seeder
             'started_at' => now()->subDays(1)->subHours(3),
             'ended_at' => now()->subDays(1),
             'status' => SessionStatus::ENDED->value,
+            'type' => SessionType::PLAYING->value,
             'total_price' => 250.00,
             'discount' => 25.00,
             'updated_by' => $staff1->id,
@@ -63,6 +67,7 @@ class GameSessionSeeder extends Seeder
             'started_at' => now()->subHours(1),
             'ended_at' => null,
             'status' => SessionStatus::ACTIVE->value,
+            'type' => SessionType::CHILLOUT->value,
             'total_price' => 0,
             'discount' => 0,
             'updated_by' => $staff2->id,

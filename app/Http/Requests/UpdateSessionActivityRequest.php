@@ -14,6 +14,7 @@ class UpdateSessionActivityRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'type' => 'nullable|in:playing,chillout',
             'activity_type' => 'nullable|in:device_use,pause',
             'device_id' => 'nullable|integer|exists:devices,id',
             'mode' => 'nullable|in:single,multi',

@@ -6,6 +6,7 @@ use App\Http\Requests\CreateSessionRequest;
 use App\Http\Requests\UpdateSessionRequest;
 use App\Services\SessionService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class SessionController extends Controller
@@ -20,9 +21,10 @@ class SessionController extends Controller
     /**
      * Display a listing of sessions.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $sessions = $this->sessionService->getAllSessions();
+        $perPage = $request->get('per_page', 10);
+        $sessions = $this->sessionService->getAllSessions($perPage);
         return response()->json($sessions);
     }
 
@@ -80,33 +82,48 @@ class SessionController extends Controller
     /**
      * Get sessions by customer.
      */
-    public function getByCustomer(int $customerId): JsonResponse
+    public function getByCustomer(Request $request, int $customerId): JsonResponse
     {
-        $sessions = $this->sessionService->getSessionsByCustomer($customerId);
+        $perPage = $request->get('per_page', 10);
+        $sessions = $this->sessionService->getSessionsByCustomer($customerId, $perPage);
         return response()->json($sessions);
     }
 
     /**
      * Get sessions by status.
      */
-    public function getByStatus(string $status): JsonResponse
+    public function getByStatus(Request $request, string $status): JsonResponse
     {
-        $sessions = $this->sessionService->getSessionsByStatus($status);
+        $perPage = $request->get('per_page', 10);
+        $sessions = $this->sessionService->getSessionsByStatus($status, $perPage);
         return response()->json($sessions);
     }
 
     /**
      * End a session.
      */
-    public function end(int $id, UpdateSessionRequest $request): JsonResponse
+    public function end(int $id, Request $request): JsonResponse
     {
-        $success = $this->sessionService->endSession($id, $request->validated());
+        $data = $request->all();
+        $result = $this->sessionService->endSession($id, $data);
         
-        if (!$success) {
-            return response()->json(['message' => 'Session not found'], Response::HTTP_NOT_FOUND);
+        if (!$result['success']) {
+            // If there are active activities, return them for confirmation
+            if ($result['has_active_activities'] ?? false) {
+                return response()->json([
+                    'message' => $result['message'],
+                    'has_active_activities' => true,
+                    'active_activities' => $result['active_activities'],
+                ], Response::HTTP_CONFLICT);
+            }
+            
+            return response()->json(['message' => $result['message'] ?? 'Session not found'], Response::HTTP_NOT_FOUND);
         }
 
-        return response()->json(['message' => 'Session ended successfully']);
+        return response()->json([
+            'message' => $result['message'],
+            'ended_activities_count' => $result['ended_activities_count'] ?? 0,
+        ]);
     }
 
     /**
