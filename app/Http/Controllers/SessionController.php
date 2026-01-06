@@ -131,7 +131,8 @@ class SessionController extends Controller
      */
     public function pause(int $id): JsonResponse
     {
-        $success = $this->sessionService->pauseSession($id);
+        $pausedBy = auth()->id(); // Get current authenticated user ID
+        $success = $this->sessionService->pauseSession($id, $pausedBy);
         
         if (!$success) {
             return response()->json(['message' => 'Session not found'], Response::HTTP_NOT_FOUND);
@@ -145,7 +146,8 @@ class SessionController extends Controller
      */
     public function resume(int $id): JsonResponse
     {
-        $success = $this->sessionService->resumeSession($id);
+        $resumedBy = auth()->id(); // Get current authenticated user ID
+        $success = $this->sessionService->resumeSession($id, $resumedBy);
         
         if (!$success) {
             return response()->json(['message' => 'Session not found'], Response::HTTP_NOT_FOUND);

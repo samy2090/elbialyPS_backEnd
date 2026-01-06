@@ -43,13 +43,13 @@ class DeviceController extends Controller
             $query->where('status', DeviceStatus::AVAILABLE->value);
         }
         
-        // Price range filter
+        // Price range filter (in Egyptian Pounds)
         if ($request->has('min_price')) {
-            $query->where('price_per_hour', '>=', $request->min_price * 100); // Convert to cents
+            $query->where('price_per_hour', '>=', $request->min_price);
         }
         
         if ($request->has('max_price')) {
-            $query->where('price_per_hour', '<=', $request->max_price * 100); // Convert to cents
+            $query->where('price_per_hour', '<=', $request->max_price);
         }
         
         // Include soft deleted items for admin users only
@@ -80,15 +80,7 @@ class DeviceController extends Controller
     {
         $validated = $request->validated();
         
-        // Convert price from dollars to cents
-        if (isset($validated['price_per_hour'])) {
-            $validated['price_per_hour'] = $validated['price_per_hour'] * 100;
-        }
-        
-        if (isset($validated['multi_price'])) {
-            $validated['multi_price'] = $validated['multi_price'] * 100;
-        }
-        
+        // Prices are stored directly in Egyptian Pounds (EGP)
         $device = Device::create($validated);
         
         return response()->json([
@@ -117,15 +109,7 @@ class DeviceController extends Controller
     {
         $validated = $request->validated();
         
-        // Convert price from dollars to cents
-        if (isset($validated['price_per_hour'])) {
-            $validated['price_per_hour'] = $validated['price_per_hour'] * 100;
-        }
-        
-        if (isset($validated['multi_price'])) {
-            $validated['multi_price'] = $validated['multi_price'] * 100;
-        }
-        
+        // Prices are stored directly in Egyptian Pounds (EGP)
         $device->update($validated);
         
         return response()->json([
@@ -237,7 +221,7 @@ class DeviceController extends Controller
                 'ps5' => Device::where('device_type', DeviceType::PS5)->count(),
                 'billboard' => Device::where('device_type', DeviceType::BILLBOARD)->count(),
             ],
-            'average_price_per_hour' => Device::avg('price_per_hour') / 100, // Convert to dollars
+            'average_price_per_hour' => Device::avg('price_per_hour'), // In Egyptian Pounds
         ];
         
         // Add soft deleted count for admin users

@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/', [UserController::class, 'index']); // List users
             Route::get('/{user}', [UserController::class, 'show']); // Show single user
             Route::get('/options/dropdown', [UserController::class, 'options']); // Get roles and statuses for dropdowns
+            Route::post('/guest', [UserController::class, 'createGuest']); // Create guest user (for session creation)
         });
         
         // Routes accessible only by Admin (full CRUD operations)

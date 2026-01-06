@@ -33,8 +33,8 @@ class DeviceFactory extends Factory
             'description' => $this->faker->sentence(10),
             'device_type' => $deviceType->value,
             'status' => $this->faker->randomElement(DeviceStatus::cases())->value,
-            'price_per_hour' => $this->faker->numberBetween(1000, 5000), // Price in cents
-            'multi_price' => $this->faker->optional(0.7)->numberBetween(8000, 20000), // Price in cents
+            'price_per_hour' => $this->faker->randomFloat(2, 10.00, 50.00), // Price in EGP
+            'multi_price' => $this->faker->optional(0.7)->randomFloat(2, 80.00, 200.00), // Price in EGP
             'notes' => $this->faker->optional(0.3)->sentence(),
         ];
     }

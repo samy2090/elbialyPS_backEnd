@@ -37,8 +37,8 @@ class Device extends Model
         return [
             'device_type' => DeviceType::class,
             'status' => DeviceStatus::class,
-            'price_per_hour' => 'integer',
-            'multi_price' => 'integer',
+            'price_per_hour' => 'decimal:2',
+            'multi_price' => 'decimal:2',
         ];
     }
 
@@ -109,19 +109,19 @@ class Device extends Model
     }
 
     /**
-     * Get formatted price per hour
+     * Get formatted price per hour (in Egyptian Pounds)
      */
     public function getFormattedPricePerHourAttribute(): string
     {
-        return number_format($this->price_per_hour / 100, 2);
+        return number_format((float) $this->price_per_hour, 2);
     }
 
     /**
-     * Get formatted multi price
+     * Get formatted multi price (in Egyptian Pounds)
      */
     public function getFormattedMultiPriceAttribute(): ?string
     {
-        return $this->multi_price ? number_format($this->multi_price / 100, 2) : null;
+        return $this->multi_price ? number_format((float) $this->multi_price, 2) : null;
     }
 
     /**

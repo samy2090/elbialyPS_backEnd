@@ -10,6 +10,7 @@ interface SessionActivityRepositoryInterface
 {
     public function getBySessionId(int $sessionId): Collection;
     public function getById(int $id): ?SessionActivity;
+    public function getByIdAndSessionId(int $id, int $sessionId): ?SessionActivity;
     public function create(array $data): SessionActivity;
     public function update(int $id, array $data): bool;
     public function delete(int $id): bool;

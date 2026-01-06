@@ -17,8 +17,8 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->enum('device_type', ['ps4', 'ps5', 'billiard']);
             $table->enum('status', ['available', 'in_use', 'maintenance'])->default('available');
-            $table->integer('price_per_hour');
-            $table->integer('multi_price')->nullable();
+            $table->decimal('price_per_hour', 8, 2);
+            $table->decimal('multi_price', 8, 2)->nullable();
             $table->text('notes')->nullable();
             $table->timestamps();
             $table->softDeletes();

@@ -19,7 +19,6 @@ return new class extends Migration
             $table->timestamp('ended_at')->nullable();
             $table->enum('status', ['active', 'paused', 'ended'])->default('active');
             $table->decimal('duration_hours', 5, 2)->nullable();
-            $table->decimal('price_per_hour', 8, 2)->nullable();
             $table->decimal('total_price', 10, 2)->default(0);
             $table->foreignId('created_by')->nullable()->constrained('users')->onDelete('set null');
             $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');

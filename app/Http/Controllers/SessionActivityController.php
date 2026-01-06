@@ -30,12 +30,12 @@ class SessionActivityController extends Controller
     /**
      * Display a specific activity.
      */
-    public function show(int $id): JsonResponse
+    public function show(int $sessionId, int $id): JsonResponse
     {
         $activity = $this->sessionActivityService->getActivity($id);
         
-        if (!$activity) {
-            return response()->json(['message' => 'Activity not found'], Response::HTTP_NOT_FOUND);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
         }
 
         return response()->json($activity);
@@ -53,22 +53,40 @@ class SessionActivityController extends Controller
     /**
      * Update the specified activity.
      */
-    public function update(UpdateSessionActivityRequest $request, int $id): JsonResponse
+    public function update(UpdateSessionActivityRequest $request, int $sessionId, int $id): JsonResponse
     {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($id);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
         $success = $this->sessionActivityService->updateActivity($id, $request->validated());
         
         if (!$success) {
             return response()->json(['message' => 'Activity not found'], Response::HTTP_NOT_FOUND);
         }
 
-        return response()->json(['message' => 'Activity updated successfully']);
+        // Fetch and return the updated activity
+        $updatedActivity = $this->sessionActivityService->getActivity($id);
+        
+        return response()->json([
+            'message' => 'Activity updated successfully',
+            'data' => $updatedActivity
+        ]);
     }
 
     /**
      * Remove the specified activity.
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy(int $sessionId, int $id): JsonResponse
     {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($id);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
         $success = $this->sessionActivityService->deleteActivity($id);
         
         if (!$success) {
@@ -92,7 +110,7 @@ class SessionActivityController extends Controller
      */
     public function updateStatus(int $sessionId, int $id, UpdateActivityStatusRequest $request): JsonResponse
     {
-        $activity = $this->sessionActivityService->updateActivityStatus($id, $request->validated());
+        $activity = $this->sessionActivityService->updateActivityStatus($id, $sessionId, $request->validated());
         
         if (!$activity) {
             return response()->json(['message' => 'Activity not found'], Response::HTTP_NOT_FOUND);
@@ -107,9 +125,9 @@ class SessionActivityController extends Controller
     /**
      * End an activity.
      */
-    public function end(int $id, UpdateSessionActivityRequest $request): JsonResponse
+    public function end(int $sessionId, int $id, UpdateSessionActivityRequest $request): JsonResponse
     {
-        $success = $this->sessionActivityService->endActivity($id, $request->validated());
+        $success = $this->sessionActivityService->endActivity($id, $sessionId, $request->validated());
         
         if (!$success) {
             return response()->json(['message' => 'Activity not found'], Response::HTTP_NOT_FOUND);

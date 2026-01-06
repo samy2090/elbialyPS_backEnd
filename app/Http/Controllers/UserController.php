@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
+use App\Http\Requests\CreateGuestUserRequest;
 use App\Models\User;
+use App\Models\Role;
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -154,6 +157,63 @@ class UserController extends Controller
             'status' => 'success',
             'message' => 'User permanently deleted'
         ]);
+    }
+
+    /**
+     * Create a guest user with minimal data (name and role only).
+     * This endpoint is used when creating a session and no existing customer matches.
+     */
+    public function createGuest(CreateGuestUserRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        
+        // Get the guest role from the roles table
+        $guestRole = Role::where('name', 'guest')->first();
+        
+        if (!$guestRole) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Guest role not found in the system'
+            ], 500);
+        }
+        
+        // Generate a unique username from the name
+        $baseUsername = Str::slug($validated['name'], '');
+        $username = $baseUsername;
+        $counter = 1;
+        
+        // Ensure username is unique
+        while (User::where('username', $username)->exists()) {
+            $username = $baseUsername . $counter;
+            $counter++;
+        }
+        
+        // Prepare user data with defaults
+        $userData = [
+            'name' => $validated['name'],
+            'username' => $username,
+            'email' => null, // Email is null for guest users
+            'password' => null, // Password is null for guest users
+            'phone' => null, // Phone is null for guest users
+            'role_id' => $guestRole->id,
+            'status' => UserStatus::ACTIVE->value,
+        ];
+        
+        // Set created_by if user is authenticated
+        if (auth()->check()) {
+            $userData['created_by'] = auth()->id();
+        }
+        
+        $user = User::create($userData);
+        
+        // Load the role relationship
+        $user->load('role');
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Guest user created successfully',
+            'data' => $user
+        ], 201);
     }
 
     /**

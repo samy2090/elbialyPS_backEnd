@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use App\Models\Session;
+use App\Models\ActivityPause;
+use App\Models\ActivityModeChange;
 
 class SessionActivity extends Model
 {
@@ -28,7 +30,6 @@ class SessionActivity extends Model
         'ended_at',
         'status',
         'duration_hours',
-        'price_per_hour',
         'total_price',
     ];
 
@@ -38,7 +39,6 @@ class SessionActivity extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'duration_hours' => 'decimal:2',
-        'price_per_hour' => 'decimal:2',
         'total_price' => 'decimal:2',
         'type' => SessionType::class,
         'activity_type' => ActivityType::class,
@@ -105,8 +105,19 @@ class SessionActivity extends Model
             }
         });
 
-        // When an activity is created, recalculate session total
+        // When an activity is created, record initial mode and recalculate session total
         static::created(function (SessionActivity $activity) {
+            // Record initial mode change
+            if ($activity->mode) {
+                ActivityModeChange::create([
+                    'session_activity_id' => $activity->id,
+                    'from_mode' => null, // Initial mode has no previous mode
+                    'to_mode' => $activity->mode->value,
+                    'changed_at' => $activity->started_at ?? now(),
+                    'changed_by' => $activity->created_by,
+                ]);
+            }
+
             if ($activity->session_id) {
                 $session = Session::find($activity->session_id);
                 if ($session) {
@@ -197,6 +208,100 @@ class SessionActivity extends Model
     public function products(): HasMany
     {
         return $this->hasMany(ActivityProduct::class, 'session_activity_id');
+    }
+
+    /**
+     * Get all pauses for this activity
+     */
+    public function pauses(): HasMany
+    {
+        return $this->hasMany(ActivityPause::class, 'session_activity_id');
+    }
+
+    /**
+     * Get active pause (if activity is currently paused)
+     */
+    public function activePause(): ?ActivityPause
+    {
+        return $this->pauses()->whereNull('resumed_at')->first();
+    }
+
+    /**
+     * Get all mode changes for this activity
+     */
+    public function modeChanges(): HasMany
+    {
+        return $this->hasMany(ActivityModeChange::class, 'session_activity_id');
+    }
+
+    /**
+     * Get active mode change (current mode period, if not ended yet)
+     */
+    public function activeModeChange(): ?ActivityModeChange
+    {
+        return $this->modeChanges()->whereNull('ended_at')->orderBy('changed_at', 'desc')->first();
+    }
+
+    /**
+     * Get total pause duration in minutes for this activity
+     * Includes both completed pauses and active pauses (pauses without resumed_at)
+     */
+    public function getTotalPauseDurationMinutes(): float
+    {
+        $totalMinutes = 0;
+        
+        // Get all pauses for this activity
+        $pauses = $this->pauses()->get();
+        
+        foreach ($pauses as $pause) {
+            if ($pause->pause_duration_minutes !== null) {
+                // Pause duration already calculated
+                $totalMinutes += (float) $pause->pause_duration_minutes;
+            } elseif ($pause->paused_at && $pause->resumed_at) {
+                // Pause has both paused_at and resumed_at but duration not calculated yet
+                $totalMinutes += abs($pause->paused_at->diffInMinutes($pause->resumed_at));
+            } elseif ($pause->paused_at && !$pause->resumed_at) {
+                // Active pause (not resumed yet) - calculate duration up to activity end or now
+                $endTime = $this->ended_at ?? now();
+                $totalMinutes += abs($pause->paused_at->diffInMinutes($endTime));
+            }
+        }
+        
+        return (float) $totalMinutes;
+    }
+
+    /**
+     * Get total pause duration in hours for this activity
+     */
+    public function getTotalPauseDurationHours(): float
+    {
+        return round($this->getTotalPauseDurationMinutes() / 60, 2);
+    }
+
+    /**
+     * Get the last paused_at timestamp from the active pause record
+     * Returns null if activity is not currently paused
+     */
+    public function getLastPausedAt(): ?\Carbon\Carbon
+    {
+        $activePause = $this->activePause();
+        return $activePause ? $activePause->paused_at : null;
+    }
+
+    /**
+     * Check if activity is currently running (active and not ended)
+     */
+    public function isRunning(): bool
+    {
+        return $this->status === SessionStatus::ACTIVE && $this->ended_at === null;
+    }
+
+    /**
+     * Check if activity status is paused (paused and not ended)
+     */
+    public function hasPausedStatus(): bool
+    {
+        return $this->status === SessionStatus::PAUSED && $this->ended_at === null;
     }
 
     /**

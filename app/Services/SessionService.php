@@ -12,13 +12,16 @@ class SessionService
 {
     private SessionRepositoryInterface $sessionRepository;
     private SessionActivityRepositoryInterface $sessionActivityRepository;
+    private SessionActivityService $sessionActivityService;
 
     public function __construct(
         SessionRepositoryInterface $sessionRepository,
-        SessionActivityRepositoryInterface $sessionActivityRepository
+        SessionActivityRepositoryInterface $sessionActivityRepository,
+        SessionActivityService $sessionActivityService
     ) {
         $this->sessionRepository = $sessionRepository;
         $this->sessionActivityRepository = $sessionActivityRepository;
+        $this->sessionActivityService = $sessionActivityService;
     }
 
     public function getAllSessions(int $perPage = 10): LengthAwarePaginator
@@ -37,6 +40,54 @@ class SessionService
         $deviceId = $data['device_id'] ?? null;
         unset($data['device_id']);
         
+        // Validate device availability if device is provided
+        if ($deviceId) {
+            $device = \App\Models\Device::find($deviceId);
+            
+            // Check if device exists
+            if (!$device) {
+                throw new \Exception('Device not found.');
+            }
+            
+            // Check if device is available
+            if (!$device->isAvailable()) {
+                throw new \Exception('Device is not available for use. it used in another session.');
+            }
+            
+            // Check if device is already in use in another active session activity
+            $existingActivity = \App\Models\SessionActivity::where('device_id', $deviceId)
+                ->whereNull('ended_at')
+                ->exists();
+            
+            if ($existingActivity) {
+                throw new \Exception('Device is already in use in another session.');
+            }
+        }
+        
+        // Extract mode for the activity - check both root level and activity_data
+        $modeInput = $data['mode'] ?? $data['activity_data']['mode'] ?? 'single';
+        unset($data['mode']);
+        
+        // Also remove activity_data if it exists (not needed after extracting mode)
+        if (isset($data['activity_data'])) {
+            unset($data['activity_data']);
+        }
+        
+        // Convert to ActivityMode enum instance
+        try {
+            $mode = \App\Enums\ActivityMode::from($modeInput);
+        } catch (\ValueError $e) {
+            // If invalid, default to SINGLE
+            $mode = \App\Enums\ActivityMode::SINGLE;
+        }
+        
+        // Extract duration to calculate ended_at if provided
+        $duration = $data['duration'] ?? null;
+        unset($data['duration']);
+        
+        // Remove ended_at if it exists (should not be set directly, only calculated from duration)
+        unset($data['ended_at']);
+        
         // Auto-determine session type: "playing" if device selected, "chillout" if not
         if (!isset($data['type'])) {
             $data['type'] = $deviceId ? 'playing' : 'chillout';
@@ -45,6 +96,12 @@ class SessionService
         // Set started_at to now() if not provided
         if (!isset($data['started_at'])) {
             $data['started_at'] = now();
+        }
+        
+        // Calculate ended_at from duration if provided
+        if ($duration !== null && $duration > 0) {
+            $startedAt = is_string($data['started_at']) ? \Carbon\Carbon::parse($data['started_at']) : $data['started_at'];
+            $data['ended_at'] = $startedAt->copy()->addHours($duration);
         }
         
         // Set default status if not provided
@@ -65,26 +122,99 @@ class SessionService
                 'created_by' => $data['created_by'] ?? null,
             ];
             
+            // Set activity ended_at from duration if provided
+            if ($duration !== null && $duration > 0) {
+                $activityData['ended_at'] = $data['ended_at'];
+                // Set duration_hours
+                $activityData['duration_hours'] = $duration;
+                // Activity remains 'active' until the end time - duration just determines when it will end
+                // Status stays 'active' (already set above), not 'ended'
+            }
+            
             if ($deviceId) {
                 // Playing session: create device_use activity with device
                 $activityData['activity_type'] = 'device_use';
                 $activityData['device_id'] = $deviceId;
-                $activityData['mode'] = 'single';
+                $activityData['mode'] = $mode; // ActivityMode enum instance
+                
+                // Calculate price if duration is provided
+                if ($duration !== null && $duration > 0) {
+                    $device = \App\Models\Device::find($deviceId);
+                    if ($device) {
+                        // Get price based on mode (in Egyptian Pounds)
+                        $pricePerHour = $mode === \App\Enums\ActivityMode::MULTI 
+                            ? ($device->multi_price ?? $device->price_per_hour) 
+                            : $device->price_per_hour;
+                        
+                        // Calculate total price: duration (hours) * price per hour
+                        $activityData['total_price'] = round($duration * (float) $pricePerHour, 2);
+                    }
+                }
             } else {
                 // Chillout session: create pause activity without device
                 $activityData['activity_type'] = 'pause';
                 $activityData['device_id'] = null;
-                $activityData['mode'] = 'single';
+                $activityData['mode'] = $mode; // ActivityMode enum instance
+                // Pause activities have no price
+                if ($duration !== null && $duration > 0) {
+                    $activityData['total_price'] = 0;
+                }
             }
             
-            $this->sessionActivityRepository->create($activityData);
+            $activity = $this->sessionActivityRepository->create($activityData);
+            
+            // If activity was created with duration, complete the mode change period
+            if ($duration !== null && $duration > 0 && $activity->mode) {
+                $activeModeChange = $activity->activeModeChange();
+                if ($activeModeChange) {
+                    $activeModeChange->update([
+                        'ended_at' => $activity->ended_at,
+                    ]);
+                    $activeModeChange->calculateDuration();
+                }
+            }
+            
+            // Automatically add the customer to the activity_user table for all activities
+            if ($activity && $session->customer_id) {
+                \App\Models\ActivityUser::create([
+                    'session_activity_id' => $activity->id,
+                    'user_id' => $session->customer_id,
+                    'duration_hours' => $activity->duration_hours,
+                    'cost_share' => $activity->total_price ?? 0,
+                ]);
+            }
         }
+        
+        // Reload the session with relationships to include the newly created activity
+        $session->refresh();
+        $session->load(['creator', 'customer', 'activities.device', 'activities.activityUsers.user']);
         
         return $session;
     }
 
     public function updateSession(int $id, array $data): bool
     {
+        $session = $this->getSession($id);
+        if (!$session) {
+            return false;
+        }
+        
+        // Check if status is being changed
+        if (isset($data['status']) && $data['status'] !== $session->status->value) {
+            $newStatus = $data['status'];
+            
+            // Update activities to match the new session status
+            if ($newStatus === 'ended') {
+                // If session is ended, update ALL activities to ended
+                $session->activities()->update(['status' => 'ended']);
+            } else {
+                // For paused or active, only update activities that are not ended
+                $session->activities()
+                    ->whereNull('ended_at')
+                    ->update(['status' => $newStatus]);
+            }
+        }
+        
         return $this->sessionRepository->update($id, $data);
     }
 
@@ -125,71 +255,123 @@ class SessionService
             return ['success' => false, 'message' => 'Session not found'];
         }
 
+        // Step 1: Validation - If session status is already ended, do nothing
+        if ($session->status === \App\Enums\SessionStatus::ENDED) {
+            return ['success' => true, 'message' => 'Session is already ended'];
+        }
+
         // Check for active activities
         $activeActivities = $this->getActiveActivities($id);
         
-        // If there are active activities and not confirmed, return them for confirmation
-        if ($activeActivities->isNotEmpty() && !($data['confirm_end_activities'] ?? false)) {
-            return [
-                'success' => false,
-                'has_active_activities' => true,
-                'active_activities' => $activeActivities->map(function ($activity) {
-                    return [
-                        'id' => $activity->id,
-                        'type' => $activity->type?->value,
-                        'activity_type' => $activity->activity_type?->value,
-                        'device_id' => $activity->device_id,
-                        'started_at' => $activity->started_at,
-                    ];
-                }),
-                'message' => 'There are active activities. Please confirm to end them all.',
-            ];
-        }
+        // Automatically end all active activities when ending a session
+        // No confirmation required - ending a session should end all activities
 
-        // End all active activities first
+        // Step 2: End each activity individually
         $endTime = now();
-        $lastActivityEndTime = null;
+        $activityEndTimes = [];
+        $allRunning = true;
+        $allPaused = true;
+        $maxPausedAt = null;
 
         foreach ($activeActivities as $activity) {
-            // Calculate duration if activity has started_at
-            if ($activity->started_at && !$activity->ended_at) {
-                // Calculate duration in hours (with decimal precision)
-                $durationInSeconds = $activity->started_at->diffInSeconds($endTime);
-                $duration = round($durationInSeconds / 3600, 2); // Convert to hours with 2 decimal places
-                
-                // Calculate total price if price_per_hour is set (for device_use activities)
-                $totalPrice = 0;
-                if ($activity->price_per_hour && $activity->activity_type === \App\Enums\ActivityType::DEVICE_USE) {
-                    $totalPrice = round($duration * $activity->price_per_hour, 2);
+            // Skip if already ended
+            if ($activity->status === \App\Enums\SessionStatus::ENDED) {
+                continue;
+            }
+
+            $activityEndTime = null;
+
+            // Determine end time based on activity state
+            if ($activity->isRunning()) {
+                // Activity is running: end_at = now
+                $activityEndTime = $endTime;
+                $allPaused = false;
+            } elseif ($activity->hasPausedStatus()) {
+                // Activity is paused: end_at = last_paused_at
+                $lastPausedAt = $activity->getLastPausedAt();
+                if ($lastPausedAt) {
+                    $activityEndTime = $lastPausedAt;
+                    // Track max paused_at for session end time calculation
+                    if ($maxPausedAt === null || $lastPausedAt->gt($maxPausedAt)) {
+                        $maxPausedAt = $lastPausedAt;
+                    }
+                } else {
+                    // Fallback: if no pause record found, use now
+                    $activityEndTime = $endTime;
+                    $allPaused = false;
                 }
-                
-                // Update activity
-                $this->sessionActivityRepository->update($activity->id, [
-                    'ended_at' => $endTime,
-                    'status' => 'ended',
-                    'duration_hours' => $duration,
-                    'total_price' => $totalPrice,
-                ]);
+                $allRunning = false;
             } else {
-                // If activity doesn't have started_at, just end it
-                $this->sessionActivityRepository->update($activity->id, [
-                    'ended_at' => $endTime,
-                    'status' => 'ended',
+                // Fallback: use now
+                $activityEndTime = $endTime;
+                $allPaused = false;
+            }
+
+            // If activity is currently paused, complete the active pause record
+            $activePause = $activity->activePause();
+            if ($activePause) {
+                $activePause->update([
+                    'resumed_at' => $activityEndTime,
                 ]);
+                $activePause->calculateDuration();
+            }
+
+            // Update activity with end time and status
+            $activity->update([
+                'ended_at' => $activityEndTime,
+                'status' => 'ended',
+            ]);
+
+            // Refresh activity to get updated pause data
+            $activity->refresh();
+            $activity->load('pauses');
+
+            // Calculate duration if activity has started_at and ended_at
+            if ($activity->started_at && $activity->ended_at) {
+                // Use the service method to calculate duration (ensures consistency)
+                $this->sessionActivityService->calculateDuration($activity->id);
             }
             
-            $lastActivityEndTime = $endTime;
+            // Free up the device if activity uses a device
+            if ($activity->isDeviceUse() && $activity->device_id) {
+                $device = \App\Models\Device::find($activity->device_id);
+                
+                if ($device) {
+                    // Check if device has other active activities (not ended) in any session
+                    $hasOtherActiveActivities = \App\Models\SessionActivity::where('device_id', $activity->device_id)
+                        ->where('id', '!=', $activity->id)
+                        ->where('status', '!=', \App\Enums\SessionStatus::ENDED->value)
+                        ->whereNull('ended_at')
+                        ->exists();
+                    
+                    // Only mark as AVAILABLE if no other activities are using it
+                    if (!$hasOtherActiveActivities) {
+                        $device->update(['status' => \App\Enums\DeviceStatus::AVAILABLE->value]);
+                    }
+                }
+            }
+
+            $activityEndTimes[] = $activityEndTime;
         }
 
-        // Get the last activity's end time (from all activities, not just active ones)
-        $lastActivity = $session->activities()
-            ->whereNotNull('ended_at')
-            ->orderBy('ended_at', 'desc')
-            ->first();
+        // Step 3: Calculate session end_at
+        $sessionEndTime = null;
         
-        $sessionEndTime = $lastActivity ? $lastActivity->ended_at : $endTime;
+        if (count($activityEndTimes) === 0) {
+            // No activities to end, use now
+            $sessionEndTime = $endTime;
+        } elseif ($allRunning) {
+            // Case A: All activities were running → session.end_at = now
+            $sessionEndTime = $endTime;
+        } elseif ($allPaused && $maxPausedAt) {
+            // Case B: All activities were paused → session.end_at = MAX(last_paused_at)
+            $sessionEndTime = $maxPausedAt;
+        } else {
+            // Case C: Mixed states → session.end_at = now
+            $sessionEndTime = $endTime;
+        }
 
-        // Update session
+        // Step 4: Finalize session
         $updateData = [
             'status' => 'ended',
             'ended_at' => $sessionEndTime,
@@ -213,13 +395,76 @@ class SessionService
         ];
     }
 
-    public function pauseSession(int $id): bool
+    public function pauseSession(int $id, ?int $pausedBy = null): bool
     {
+        $session = $this->getSession($id);
+        if (!$session) {
+            return false;
+        }
+        
+        $pauseTime = now();
+        
+        // Get all non-ended activities
+        $activities = $session->activities()
+            ->whereNull('ended_at')
+            ->get();
+        
+        foreach ($activities as $activity) {
+            // Only create pause record if activity is currently active (not already paused)
+            if ($activity->status === \App\Enums\SessionStatus::ACTIVE) {
+                // Create pause record
+                \App\Models\ActivityPause::create([
+                    'session_activity_id' => $activity->id,
+                    'paused_at' => $pauseTime,
+                    'paused_by' => $pausedBy,
+                ]);
+            }
+            
+            // Update activity status to paused
+            $activity->update(['status' => 'paused']);
+        }
+        
+        // Update session status
         return $this->sessionRepository->update($id, ['status' => 'paused']);
     }
 
-    public function resumeSession(int $id): bool
+    public function resumeSession(int $id, ?int $resumedBy = null): bool
     {
+        $session = $this->getSession($id);
+        if (!$session) {
+            return false;
+        }
+        
+        $resumeTime = now();
+        
+        // Get all non-ended activities
+        $activities = $session->activities()
+            ->whereNull('ended_at')
+            ->get();
+        
+        foreach ($activities as $activity) {
+            // Only complete pause record if activity is currently paused
+            if ($activity->status === \App\Enums\SessionStatus::PAUSED) {
+                // Find active pause record (not resumed yet)
+                $activePause = $activity->activePause();
+                
+                if ($activePause) {
+                    // Complete the pause record
+                    $activePause->update([
+                        'resumed_at' => $resumeTime,
+                        'resumed_by' => $resumedBy,
+                    ]);
+                    
+                    // Calculate pause duration
+                    $activePause->calculateDuration();
+                }
+            }
+            
+            // Update activity status to active
+            $activity->update(['status' => 'active']);
+        }
+        
+        // Update session status
         return $this->sessionRepository->update($id, ['status' => 'active']);
     }
 

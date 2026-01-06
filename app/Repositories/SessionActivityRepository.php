@@ -21,6 +21,14 @@ class SessionActivityRepository implements SessionActivityRepositoryInterface
             ->find($id);
     }
 
+    public function getByIdAndSessionId(int $id, int $sessionId): ?SessionActivity
+    {
+        return SessionActivity::where('id', $id)
+            ->where('session_id', $sessionId)
+            ->with(['session', 'device', 'creator', 'activityUsers', 'products'])
+            ->first();
+    }
+
     public function create(array $data): SessionActivity
     {
         return SessionActivity::create($data);

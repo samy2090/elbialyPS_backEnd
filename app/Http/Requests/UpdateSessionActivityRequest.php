@@ -20,7 +20,6 @@ class UpdateSessionActivityRequest extends FormRequest
             'mode' => 'nullable|in:single,multi',
             'ended_at' => 'nullable|date_format:Y-m-d H:i:s',
             'duration_hours' => 'nullable|numeric|min:0',
-            'price_per_hour' => 'nullable|numeric|min:0',
             'total_price' => 'nullable|numeric|min:0',
         ];
     }
