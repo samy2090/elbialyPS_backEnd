@@ -153,18 +153,59 @@ class SessionActivityController extends Controller
     }
 
     /**
+     * Get available users for an activity.
+     */
+    public function getAvailableUsers(int $sessionId, int $activityId): JsonResponse
+    {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($activityId);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        $users = $this->sessionActivityService->getAvailableUsersForActivity($activityId);
+        return response()->json($users);
+    }
+
+    /**
      * Add a user to an activity.
      */
     public function addUser(int $sessionId, int $activityId, \Illuminate\Http\Request $request): JsonResponse
     {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($activityId);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        // Rule: Cannot add users to ended activities
+        if ($activity->status === \App\Enums\SessionStatus::ENDED) {
+            return response()->json([
+                'message' => 'Cannot add users to ended activities'
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
         $validated = $request->validate([
             'user_id' => 'required|integer|exists:users,id',
             'duration_hours' => 'nullable|numeric|min:0',
             'cost_share' => 'nullable|numeric|min:0',
         ]);
 
-        $activityUser = $this->sessionActivityService->addUserToActivity($activityId, $validated);
-        return response()->json($activityUser, Response::HTTP_CREATED);
+        try {
+            $activityUser = $this->sessionActivityService->addUserToActivity($activityId, $validated);
+            
+            // Load the user relationship for response
+            $activityUser->load('user');
+            
+            return response()->json([
+                'message' => 'User added to activity successfully',
+                'data' => $activityUser
+            ], Response::HTTP_CREATED);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage()
+            ], Response::HTTP_BAD_REQUEST);
+        }
     }
 
     /**

@@ -11,13 +11,13 @@ class SessionActivityRepository implements SessionActivityRepositoryInterface
     public function getBySessionId(int $sessionId): Collection
     {
         return SessionActivity::where('session_id', $sessionId)
-            ->with(['session', 'device', 'creator', 'activityUsers', 'products'])
+            ->with(['session', 'device', 'creator', 'activityUsers.user', 'products'])
             ->get();
     }
 
     public function getById(int $id): ?SessionActivity
     {
-        return SessionActivity::with(['session', 'device', 'creator', 'activityUsers', 'products'])
+        return SessionActivity::with(['session', 'device', 'creator', 'activityUsers.user', 'products'])
             ->find($id);
     }
 
@@ -25,7 +25,7 @@ class SessionActivityRepository implements SessionActivityRepositoryInterface
     {
         return SessionActivity::where('id', $id)
             ->where('session_id', $sessionId)
-            ->with(['session', 'device', 'creator', 'activityUsers', 'products'])
+            ->with(['session', 'device', 'creator', 'activityUsers.user', 'products'])
             ->first();
     }
 
@@ -53,7 +53,7 @@ class SessionActivityRepository implements SessionActivityRepositoryInterface
     public function getByActivityType(string $type, int $perPage = 10): LengthAwarePaginator
     {
         return SessionActivity::where('activity_type', $type)
-            ->with(['session', 'device', 'creator', 'activityUsers', 'products'])
+            ->with(['session', 'device', 'creator', 'activityUsers.user', 'products'])
             ->paginate($perPage);
     }
 }

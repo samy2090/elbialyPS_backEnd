@@ -120,6 +120,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Activity users management routes
         Route::prefix('{activityId}/users')->middleware('admin')->group(function () {
+            Route::get('/available', [SessionActivityController::class, 'getAvailableUsers']); // Get available users for activity
             Route::post('/', [SessionActivityController::class, 'addUser']); // Add user to activity
             Route::delete('/{userId}', [SessionActivityController::class, 'removeUser']); // Remove user from activity
         });
