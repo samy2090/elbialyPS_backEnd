@@ -124,5 +124,21 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/', [SessionActivityController::class, 'addUser']); // Add user to activity
             Route::delete('/{userId}', [SessionActivityController::class, 'removeUser']); // Remove user from activity
         });
+
+        // Activity products management routes
+        Route::prefix('{activityId}/products')->group(function () {
+            // Read routes accessible by both Admin and Staff
+            Route::middleware('admin_or_staff')->group(function () {
+                Route::get('/', [SessionActivityController::class, 'getActivityProducts']); // Get all products for activity
+                Route::get('/user/{userId}', [SessionActivityController::class, 'getActivityProductsByUser']); // Get products by user for activity
+            });
+            
+            // Write routes accessible only by Admin
+            Route::middleware('admin')->group(function () {
+                Route::post('/', [SessionActivityController::class, 'addProductToActivity']); // Add product to activity
+                Route::put('/{productOrderId}', [SessionActivityController::class, 'updateActivityProduct']); // Update product order
+                Route::delete('/{productOrderId}', [SessionActivityController::class, 'deleteActivityProduct']); // Delete product order
+            });
+        });
     });
 });

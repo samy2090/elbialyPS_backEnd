@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CreateSessionActivityRequest;
 use App\Http\Requests\UpdateSessionActivityRequest;
 use App\Http\Requests\UpdateActivityStatusRequest;
+use App\Http\Requests\CreateActivityProductRequest;
 use App\Services\SessionActivityService;
+use App\Models\ActivityProduct;
+use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
@@ -220,5 +223,161 @@ class SessionActivityController extends Controller
         }
 
         return response()->json(['message' => 'User removed from activity']);
+    }
+
+    // ==================== Activity Products Methods ====================
+
+    /**
+     * Get all products for an activity
+     */
+    public function getActivityProducts(int $sessionId, int $activityId): JsonResponse
+    {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($activityId);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        $products = ActivityProduct::where('session_activity_id', $activityId)
+            ->with(['product', 'orderedByUser'])
+            ->get();
+
+        return response()->json(['data' => $products]);
+    }
+
+    /**
+     * Add a product to an activity
+     */
+    public function addProductToActivity(int $sessionId, int $activityId, CreateActivityProductRequest $request): JsonResponse
+    {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($activityId);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        $validated = $request->validated();
+
+        // Get the product to fetch current price
+        $product = Product::find($validated['product_id']);
+        if (!$product) {
+            return response()->json(['message' => 'Product not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        // Calculate prices
+        $price = (float) $product->price;
+        $totalPrice = $price * $validated['quantity'];
+
+        // Create activity product
+        $activityProduct = ActivityProduct::create([
+            'session_activity_id' => $activityId,
+            'product_id' => $validated['product_id'],
+            'quantity' => $validated['quantity'],
+            'price' => $price,
+            'total_price' => $totalPrice,
+            'ordered_by_user_id' => $validated['ordered_by_user_id'],
+        ]);
+
+        // Load relationships for response
+        $activityProduct->load(['product', 'orderedByUser']);
+
+        return response()->json([
+            'message' => 'Product added to activity successfully',
+            'data' => $activityProduct
+        ], Response::HTTP_CREATED);
+    }
+
+    /**
+     * Update a product order in an activity
+     */
+    public function updateActivityProduct(int $sessionId, int $activityId, int $productOrderId, CreateActivityProductRequest $request): JsonResponse
+    {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($activityId);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        // Validate that product order belongs to the activity
+        $activityProduct = ActivityProduct::where('id', $productOrderId)
+            ->where('session_activity_id', $activityId)
+            ->first();
+
+        if (!$activityProduct) {
+            return response()->json(['message' => 'Product order not found in this activity'], Response::HTTP_NOT_FOUND);
+        }
+
+        $validated = $request->validated();
+
+        // Get the product to fetch current price (in case product_id changed)
+        $product = Product::find($validated['product_id']);
+        if (!$product) {
+            return response()->json(['message' => 'Product not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        // Calculate prices
+        $price = (float) $product->price;
+        $totalPrice = $price * $validated['quantity'];
+
+        // Update activity product
+        $activityProduct->update([
+            'product_id' => $validated['product_id'],
+            'quantity' => $validated['quantity'],
+            'price' => $price,
+            'total_price' => $totalPrice,
+            'ordered_by_user_id' => $validated['ordered_by_user_id'],
+        ]);
+
+        // Load relationships for response
+        $activityProduct->load(['product', 'orderedByUser']);
+
+        return response()->json([
+            'message' => 'Product order updated successfully',
+            'data' => $activityProduct
+        ]);
+    }
+
+    /**
+     * Delete a product order from an activity
+     */
+    public function deleteActivityProduct(int $sessionId, int $activityId, int $productOrderId): JsonResponse
+    {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($activityId);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        // Validate that product order belongs to the activity
+        $activityProduct = ActivityProduct::where('id', $productOrderId)
+            ->where('session_activity_id', $activityId)
+            ->first();
+
+        if (!$activityProduct) {
+            return response()->json(['message' => 'Product order not found in this activity'], Response::HTTP_NOT_FOUND);
+        }
+
+        $activityProduct->delete();
+
+        return response()->json(['message' => 'Product order deleted successfully']);
+    }
+
+    /**
+     * Get products ordered by a specific user in an activity
+     */
+    public function getActivityProductsByUser(int $sessionId, int $activityId, int $userId): JsonResponse
+    {
+        // Validate that activity belongs to the session
+        $activity = $this->sessionActivityService->getActivity($activityId);
+        if (!$activity || $activity->session_id != $sessionId) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        $products = ActivityProduct::where('session_activity_id', $activityId)
+            ->where('ordered_by_user_id', $userId)
+            ->with(['product', 'orderedByUser'])
+            ->get();
+
+        return response()->json(['data' => $products]);
     }
 }
