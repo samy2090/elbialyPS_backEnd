@@ -7,12 +7,15 @@ use App\Models\ActivityUser;
 use App\Models\ActivityPause;
 use App\Models\Device;
 use App\Models\ActivityModeChange;
+use App\Models\User;
+use App\Models\Session;
 use App\Enums\SessionStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\ActivityMode;
 use App\Repositories\SessionActivityRepositoryInterface;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 
 class SessionActivityService
 {
@@ -557,10 +560,112 @@ class SessionActivityService
     }
 
     /**
+     * Get available users for an activity
+     * Returns all users with metadata:
+     * - Excludes session customer (game_sessions.customer_id)
+     * - Includes all users (even those in active activities, but marked as unavailable)
+     * - Users in active activities are marked with 'in_active_activity' = true
+     * - Users in paused activities are included and can be moved
+     */
+    public function getAvailableUsersForActivity(int $activityId): SupportCollection
+    {
+        // Get the activity and its session
+        $activity = $this->getActivity($activityId);
+        if (!$activity) {
+            return collect([]);
+        }
+
+        $session = Session::find($activity->session_id);
+        if (!$session) {
+            return collect([]);
+        }
+
+        // Get all users in the system
+        $allUsers = User::all();
+
+        // Get user IDs in active activities (to mark as unavailable)
+        $activeActivityUserIds = ActivityUser::whereHas('sessionActivity', function ($query) {
+            $query->where('status', SessionStatus::ACTIVE->value);
+        })->pluck('user_id')->unique()->toArray();
+
+        // Get user IDs already in current activity
+        $currentActivityUserIds = ActivityUser::where('session_activity_id', $activityId)
+            ->pluck('user_id')
+            ->unique()
+            ->toArray();
+
+        // Process users and add metadata
+        // Convert to Support Collection since we're adding metadata and filtering
+        $usersWithMetadata = $allUsers->map(function ($user) use ($session, $activeActivityUserIds, $currentActivityUserIds) {
+            // Exclude session customer
+            if ($session->customer_id == $user->id) {
+                return null;
+            }
+
+            // Check if user is in active activity
+            $inActiveActivity = in_array($user->id, $activeActivityUserIds);
+            
+            // Check if user is already in current activity
+            $inCurrentActivity = in_array($user->id, $currentActivityUserIds);
+
+            // Add metadata to user object
+            $user->in_active_activity = $inActiveActivity;
+            $user->in_current_activity = $inCurrentActivity;
+            $user->is_available = !$inActiveActivity && !$inCurrentActivity;
+
+            return $user;
+        })->filter(); // Remove null values (excluded session customer)
+
+        // Convert to Support Collection and reindex
+        return collect($usersWithMetadata->values());
+    }
+
+    /**
      * Add a user to a session activity
+     * Business rules:
+     * - Removes user from any paused activities first
+     * - Then adds them to the selected activity
+     * - Validates user is not already in an active activity
      */
     public function addUserToActivity(int $activityId, array $data): ActivityUser
     {
+        $userId = $data['user_id'];
+        
+        // Get the activity and its session
+        $activity = $this->getActivity($activityId);
+        if (!$activity) {
+            throw new \Exception('Activity not found');
+        }
+
+        $session = Session::find($activity->session_id);
+        if (!$session) {
+            throw new \Exception('Session not found');
+        }
+
+        // Validate: Cannot add session customer
+        if ($session->customer_id == $userId) {
+            throw new \Exception('Cannot add session customer to activities');
+        }
+
+        // Validate: User must not be in any active activity
+        $userInActiveActivity = ActivityUser::whereHas('sessionActivity', function ($query) {
+            $query->where('status', SessionStatus::ACTIVE->value);
+        })->where('user_id', $userId)->exists();
+
+        if ($userInActiveActivity) {
+            throw new \Exception('User is already assigned to an active activity');
+        }
+
+        // Remove user from any paused activities (they can be moved)
+        $pausedActivities = ActivityUser::whereHas('sessionActivity', function ($query) {
+            $query->where('status', SessionStatus::PAUSED->value);
+        })->where('user_id', $userId)->get();
+
+        foreach ($pausedActivities as $pausedActivityUser) {
+            $pausedActivityUser->delete();
+        }
+
+        // Now add user to the selected activity
         $data['session_activity_id'] = $activityId;
         return ActivityUser::create($data);
     }
