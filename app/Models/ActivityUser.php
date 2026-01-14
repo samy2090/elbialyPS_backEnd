@@ -26,6 +26,30 @@ class ActivityUser extends Model
         'updated_at' => 'datetime',
     ];
 
+    protected $appends = ['duration_formatted'];
+
+    /**
+     * Format duration_hours as "H:MM minutes" for display
+     * Example: 0.5 hours -> "0:30 minutes", 1.5 hours -> "1:30 minutes", 2.0 hours -> "2:00 minutes"
+     */
+    public function getDurationFormattedAttribute(): ?string
+    {
+        if ($this->duration_hours === null) {
+            return null;
+        }
+
+        $hours = (int) floor($this->duration_hours);
+        $minutes = (int) round(($this->duration_hours - $hours) * 60);
+        
+        // Handle edge case where minutes round to 60
+        if ($minutes >= 60) {
+            $hours += 1;
+            $minutes = 0;
+        }
+
+        return sprintf('%d:%02d minutes', $hours, $minutes);
+    }
+
     /**
      * Get the session activity this belongs to
      */

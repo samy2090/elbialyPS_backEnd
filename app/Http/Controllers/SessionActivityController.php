@@ -44,9 +44,11 @@ class SessionActivityController extends Controller
     /**
      * Store a newly created activity.
      */
-    public function store(CreateSessionActivityRequest $request): JsonResponse
+    public function store(int $sessionId, CreateSessionActivityRequest $request): JsonResponse
     {
-        $activity = $this->sessionActivityService->createActivity($request->validated());
+        $data = $request->validated();
+        $data['session_id'] = $sessionId;
+        $activity = $this->sessionActivityService->createActivity($data);
         return response()->json($activity, Response::HTTP_CREATED);
     }
 
