@@ -60,51 +60,36 @@ class ActivityProduct extends Model
      */
     protected static function booted(): void
     {
-        // Helper method to recalculate activity and session totals
-        $recalculateTotals = function (ActivityProduct $activityProduct, $eventType = 'created') {
+        // Helper method to add product price to activity total
+        $addProductPrice = function (ActivityProduct $activityProduct, $eventType = 'created') {
             $activity = SessionActivity::find($activityProduct->session_activity_id);
             if (!$activity) {
                 return;
             }
 
-            // Get current activity total before change
-            $currentActivityTotal = (float) ($activity->total_price ?? 0);
-            
-            // Calculate old products total (before this change)
-            $oldProductsTotal = (float) ($activity->products()->sum('total_price') ?? 0);
-            
-            // Adjust for the current change
-            if ($eventType === 'created') {
-                // productsTotal already includes the new product, so subtract it to get old total
-                $oldProductsTotal = $oldProductsTotal - (float) $activityProduct->total_price;
-            } elseif ($eventType === 'deleted') {
-                // productsTotal doesn't include deleted product, so add it to get old total
-                $oldProductsTotal = $oldProductsTotal + (float) $activityProduct->total_price;
-            } elseif ($eventType === 'updated') {
-                // productsTotal includes updated product, need to subtract the change
-                $oldTotalPrice = (float) ($activityProduct->getOriginal('total_price') ?? $activityProduct->total_price);
-                $oldProductsTotal = $oldProductsTotal - (float) $activityProduct->total_price + $oldTotalPrice;
-            }
-            
-            // Calculate device usage price (preserved from before the change)
-            $deviceUsagePrice = max(0, $currentActivityTotal - $oldProductsTotal);
-            
-            // Refresh activity to get latest data including products
+            // Refresh activity to get latest data
             $activity->refresh();
             
-            // Calculate new products total (after the change)
-            $newProductsTotal = (float) ($activity->products()->sum('total_price') ?? 0);
+            // Get current activity total price
+            $currentTotal = (float) ($activity->total_price ?? 0);
             
-            // For ended activities, recalculate full activity total using calculateDuration
-            // This ensures device usage is recalculated correctly based on mode periods and pauses
-            if ($activity->ended_at) {
-                $sessionActivityService = app(\App\Services\SessionActivityService::class);
-                $sessionActivityService->calculateDuration($activity->id);
-            } else {
-                // For active/paused activities, update: new total = device usage + new products total
-                $newActivityTotal = max(0, $deviceUsagePrice + $newProductsTotal);
-                $activity->update(['total_price' => round($newActivityTotal, 2)]);
+            // Calculate product price change
+            $productPriceChange = 0;
+            if ($eventType === 'created') {
+                $productPriceChange = (float) $activityProduct->total_price;
+            } elseif ($eventType === 'deleted') {
+                $productPriceChange = -(float) $activityProduct->total_price;
+            } elseif ($eventType === 'updated') {
+                $oldPrice = (float) ($activityProduct->getOriginal('total_price') ?? 0);
+                $newPrice = (float) $activityProduct->total_price;
+                $productPriceChange = $newPrice - $oldPrice;
             }
+            
+            // Add product price change to current total
+            $newTotal = $currentTotal + $productPriceChange;
+            
+            // Update activity total price
+            $activity->update(['total_price' => round($newTotal, 2)]);
 
             // Recalculate session total
             if ($activity->session_id) {
@@ -115,21 +100,21 @@ class ActivityProduct extends Model
             }
         };
 
-        // When a product is created, recalculate activity and session totals
-        static::created(function ($activityProduct) use ($recalculateTotals) {
-            $recalculateTotals($activityProduct, 'created');
+        // When a product is created, add its price to activity total
+        static::created(function ($activityProduct) use ($addProductPrice) {
+            $addProductPrice($activityProduct, 'created');
         });
 
-        // When a product is updated (especially total_price or quantity), recalculate totals
-        static::updated(function (ActivityProduct $activityProduct) use ($recalculateTotals) {
+        // When a product is updated (especially total_price or quantity), update activity total
+        static::updated(function (ActivityProduct $activityProduct) use ($addProductPrice) {
             if ($activityProduct->isDirty(['total_price', 'quantity', 'product_id'])) {
-                $recalculateTotals($activityProduct, 'updated');
+                $addProductPrice($activityProduct, 'updated');
             }
         });
 
-        // When a product is deleted, recalculate activity and session totals
-        static::deleted(function ($activityProduct) use ($recalculateTotals) {
-            $recalculateTotals($activityProduct, 'deleted');
+        // When a product is deleted, subtract its price from activity total
+        static::deleted(function ($activityProduct) use ($addProductPrice) {
+            $addProductPrice($activityProduct, 'deleted');
         });
     }
 }

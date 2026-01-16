@@ -66,7 +66,22 @@ class SessionActivityService
             unset($data['ended_at']);
         }
         
-        return $this->sessionActivityRepository->create($data);
+        // For pause activities, set price to 0 if duration is provided
+        if (isset($data['activity_type']) && $data['activity_type'] === 'pause' && $duration !== null && $duration > 0) {
+            $data['total_price'] = 0;
+        }
+        
+        $activity = $this->sessionActivityRepository->create($data);
+        
+        // Calculate initial price if activity has duration and is device_use
+        if ($activity && $activity->isDeviceUse() && $duration !== null && $duration > 0) {
+            $calculatedPrice = $this->calculateActivityPrice($activity);
+            if ($calculatedPrice > 0) {
+                $activity->update(['total_price' => $calculatedPrice]);
+            }
+        }
+        
+        return $activity;
     }
 
     public function updateActivity(int $id, array $data): bool
@@ -103,6 +118,17 @@ class SessionActivityService
                     'changed_at' => $changeTime,
                     'changed_by' => auth()->id(),
                 ]);
+                
+                // Recalculate price immediately after mode change
+                // For scheduled activities (has ended_at), include remaining time
+                // For unlimited activities, just recalculate real time used
+                if ($activity->ended_at) {
+                    // Scheduled activity: real time used + remaining time until ended_at × current mode
+                    $this->recalculateActivityPriceForResume($id);
+                } else {
+                    // Unlimited activity: just real time used
+                    $this->recalculateActivityPrice($id);
+                }
             }
         }
 
@@ -136,17 +162,36 @@ class SessionActivityService
             return false;
         }
 
-        // Only create pause record if activity is not ended and doesn't already have an active pause
-        if (!$activity->ended_at && !$activity->activePause()) {
+        // Create pause record if activity is not ended and doesn't already have an active pause
+        // Note: scheduled activities have ended_at (future time), but are still active until that time
+        // So we check status, not ended_at
+        $pauseTime = now();
+        if ($activity->status !== SessionStatus::ENDED && !$activity->activePause()) {
             ActivityPause::create([
                 'session_activity_id' => $activity->id,
-                'paused_at' => now(),
+                'paused_at' => $pauseTime,
                 'paused_by' => auth()->id(),
             ]);
         }
 
         // Update activity status to paused
-        return $this->sessionActivityRepository->update($id, ['status' => SessionStatus::PAUSED->value]);
+        $updated = $this->sessionActivityRepository->update($id, ['status' => SessionStatus::PAUSED->value]);
+        
+        // Recalculate price based on active time up to pause point
+        // This works for both scheduled and unlimited activities
+        if ($updated) {
+            $this->recalculateActivityPrice($id, $pauseTime);
+            
+            // Explicitly recalculate session total to ensure it's updated
+            if ($activity->session_id) {
+                $session = Session::find($activity->session_id);
+                if ($session) {
+                    $session->calculateTotalPrice();
+                }
+            }
+        }
+        
+        return $updated;
     }
 
     /**
@@ -177,7 +222,17 @@ class SessionActivityService
         }
 
         // Update activity status to active
-        return $this->sessionActivityRepository->update($id, ['status' => SessionStatus::ACTIVE->value]);
+        $updated = $this->sessionActivityRepository->update($id, ['status' => SessionStatus::ACTIVE->value]);
+        
+        // Recalculate price on resume ONLY for scheduled activities (has ended_at)
+        // For unlimited activities (no ended_at), no recalculation needed
+        if ($updated && $activity->ended_at) {
+            // For scheduled activities: calculate real active time + remaining time until ended_at
+            // This ensures we account for the full scheduled duration
+            $this->recalculateActivityPriceForResume($id);
+        }
+        
+        return $updated;
     }
 
     /**
@@ -240,10 +295,25 @@ class SessionActivityService
             return null;
         }
 
-        // Calculate duration with pause time excluded and save to duration_hours field
+        // Recalculate price with the determined end time (actual end time, not scheduled)
+        // Force refresh to ensure we have the latest data including the updated ended_at
         $activity->refresh();
-        if ($activity->started_at && $activity->ended_at) {
-            $this->calculateDuration($activity->id);
+        $activity->load(['pauses', 'modeChanges', 'products', 'device']);
+        
+        // Always recalculate if activity has started_at
+        // Use the actual end time (activityEndTime) not the scheduled one
+        // This is critical when ending early - we want to calculate based on actual time used
+        if ($activity->started_at) {
+            $this->recalculateActivityPrice($activity->id, $activityEndTime);
+            
+            // Explicitly recalculate session total to ensure it's updated
+            // (Model events should handle this, but ensure it happens)
+            if ($activity->session_id) {
+                $session = Session::find($activity->session_id);
+                if ($session) {
+                    $session->calculateTotalPrice();
+                }
+            }
         }
         
         // Free up the device if activity uses a device
@@ -323,24 +393,40 @@ class SessionActivityService
     }
 
     /**
-     * Calculate duration and total price for an activity
-     * Uses ended_at timestamp (not current time) - for activities that have ended
+     * Recalculate activity price based on actual active time, mode periods, and products
+     * Works for both scheduled and unlimited activities
+     * 
+     * @param int $id Activity ID
+     * @param \Carbon\Carbon|null $endTime Optional end time (for pause calculations or ended activities)
+     * @return bool Success status
      */
-    public function calculateDuration(int $id): bool
+    public function recalculateActivityPrice(int $id, ?\Carbon\Carbon $endTime = null): bool
     {
-        $activity = $this->getActivity($id);
-        if (!$activity || !$activity->started_at || !$activity->ended_at) {
+        // Get fresh activity data directly from repository to avoid caching issues
+        $activity = $this->sessionActivityRepository->getById($id);
+        if (!$activity || !$activity->started_at) {
             return false;
         }
 
-        // Refresh activity to get latest data
+        // Refresh activity to get latest data including all relationships
         $activity->refresh();
         $activity->load(['pauses', 'modeChanges', 'products', 'device']);
 
-        // Use ended_at for calculation (not current time)
-        $endTime = $activity->ended_at;
+        // Determine calculation end time:
+        // 1. If $endTime provided, use it (for pause calculations or ended activities)
+        //    This is critical when ending early - we want actual time, not scheduled time
+        // 2. Else if activity has ended_at, use it (for scheduled activities)
+        // 3. Else use now() (for unlimited active activities)
+        if ($endTime === null) {
+            $endTime = $activity->ended_at ?? now();
+        }
+        
+        // Ensure endTime is not in the future (shouldn't happen, but safety check)
+        if ($endTime > now() && $activity->status !== SessionStatus::ENDED) {
+            $endTime = now();
+        }
 
-        // Calculate total time from started_at to ended_at
+        // Calculate total time from started_at to end time
         $totalTimeInMinutes = abs($endTime->diffInMinutes($activity->started_at));
         $totalTimeInHours = $totalTimeInMinutes / 60;
         
@@ -382,7 +468,8 @@ class SessionActivityService
                 // Calculate time for each mode period, accounting for pauses
                 foreach ($modeChanges as $modeChange) {
                     $periodStart = $modeChange->changed_at;
-                    $periodEnd = $modeChange->ended_at ?? $activity->ended_at;
+                    // For active mode change periods, use endTime instead of ended_at
+                    $periodEnd = $modeChange->ended_at ?? $endTime;
                     
                     // Calculate raw period duration in minutes
                     $periodDurationMinutes = abs($periodStart->diffInMinutes($periodEnd));
@@ -392,7 +479,8 @@ class SessionActivityService
                     $pauseMinutesInPeriod = 0;
                     foreach ($activity->pauses as $pause) {
                         $pauseStart = $pause->paused_at;
-                        $pauseEnd = $pause->resumed_at ?? $activity->ended_at;
+                        // For active pauses, use endTime instead of ended_at
+                        $pauseEnd = $pause->resumed_at ?? $endTime;
                         
                         // Check if pause overlaps with period
                         // Overlap exists if pause starts before period ends and pause ends after period starts
@@ -431,26 +519,33 @@ class SessionActivityService
         // Total activity price = device usage + products
         $totalPrice = $deviceUsagePrice + $productsTotal;
 
-        // Model events will automatically recalculate session total when total_price is updated
-        return $this->sessionActivityRepository->update($id, [
+        // Update activity with calculated price and duration
+        // Use repository update to ensure it's saved properly
+        $updated = $this->sessionActivityRepository->update($id, [
             'duration_hours' => round($realDurationHours, 2),
             'total_price' => round($totalPrice, 2),
         ]);
+        
+        // Ensure the update was successful
+        if ($updated) {
+            // Refresh the activity to get the updated values
+            $activity->refresh();
+        }
+        
+        return $updated;
     }
 
     /**
-     * Recalculate activity price in real-time (for activities with scheduled duration)
-     * Uses current time instead of ended_at
+     * Recalculate activity price when resuming a scheduled activity
+     * For scheduled activities: real active time used + remaining time until ended_at × current mode + products
+     * 
+     * @param int $id Activity ID
+     * @return bool Success status
      */
-    public function recalculateActivityPriceRealTime(int $id): bool
+    private function recalculateActivityPriceForResume(int $id): bool
     {
-        $activity = $this->getActivity($id);
-        if (!$activity || !$activity->started_at) {
-            return false;
-        }
-
-        // Only recalculate for activities with scheduled duration (ended_at is set)
-        if (!$activity->ended_at) {
+        $activity = $this->sessionActivityRepository->getById($id);
+        if (!$activity || !$activity->started_at || !$activity->ended_at) {
             return false;
         }
 
@@ -458,67 +553,108 @@ class SessionActivityService
         $activity->refresh();
         $activity->load(['pauses', 'modeChanges', 'products', 'device']);
 
-        // Use current time for calculation (not ended_at)
-        $currentTime = now();
+        $now = now();
+        $currentMode = $activity->mode;
 
-        // Calculate total time from started_at to current time
-        $totalTimeInMinutes = abs($currentTime->diffInMinutes($activity->started_at));
-        $totalTimeInHours = $totalTimeInMinutes / 60;
+        // Part 1: Calculate real active time used (up to now, excluding pauses) with mode periods
+        $realActiveTimeUsed = $this->calculateRealActiveTimeUsed($activity, $now);
         
-        // Get total pause duration in hours
-        $totalPauseDurationHours = $activity->getTotalPauseDurationHours();
-        
-        // Calculate real activity duration (excluding pause time)
-        $realDurationHours = $totalTimeInHours - $totalPauseDurationHours;
-        
-        // Ensure duration is not negative
-        $realDurationHours = max(0, $realDurationHours);
-        
-        // Calculate device usage price based on mode periods
+        // Part 2: Calculate remaining time until ended_at
+        $remainingTimeHours = 0;
+        if ($activity->ended_at > $now) {
+            $remainingTimeMinutes = abs($now->diffInMinutes($activity->ended_at));
+            $remainingTimeHours = $remainingTimeMinutes / 60;
+        }
+
+        // Calculate device usage price
         $deviceUsagePrice = 0;
         
         if ($activity->isDeviceUse() && $activity->device_id) {
-            // Get device prices (in Egyptian Pounds)
             $device = $activity->device;
             $singlePricePerHour = (float) $device->price_per_hour;
             $multiPricePerHour = $device->multi_price 
                 ? (float) $device->multi_price
                 : $singlePricePerHour;
 
-            // Get all mode changes ordered by changed_at
-            $modeChanges = $activity->modeChanges()->orderBy('changed_at', 'asc')->get();
+            // Calculate price for real active time used (with mode periods)
+            $realActivePrice = $this->calculateDevicePriceForTimePeriod($activity, $activity->started_at, $now);
             
-            $singleHours = 0;
-            $multiHours = 0;
+            // Calculate price for remaining time (using current mode)
+            $remainingPrice = 0;
+            if ($remainingTimeHours > 0) {
+                $remainingPricePerHour = $currentMode === ActivityMode::MULTI 
+                    ? $multiPricePerHour 
+                    : $singlePricePerHour;
+                $remainingPrice = $remainingTimeHours * $remainingPricePerHour;
+            }
+            
+            $deviceUsagePrice = $realActivePrice + $remainingPrice;
+        }
+
+        // Calculate products total
+        $productsTotal = (float) ($activity->products()->sum('total_price') ?? 0);
+
+        // Total = real active time price + remaining time price + products
+        $totalPrice = $deviceUsagePrice + $productsTotal;
+
+        // Calculate total real duration (active time used + remaining time)
+        $totalRealDurationHours = $realActiveTimeUsed['totalHours'] + $remainingTimeHours;
+
+        // Update activity
+        return $this->sessionActivityRepository->update($id, [
+            'duration_hours' => round($totalRealDurationHours, 2),
+            'total_price' => round($totalPrice, 2),
+        ]);
+    }
+
+    /**
+     * Calculate real active time used (excluding pauses) with mode periods
+     * 
+     * @param SessionActivity $activity
+     * @param \Carbon\Carbon $endTime
+     * @return array ['totalHours' => float, 'singleHours' => float, 'multiHours' => float]
+     */
+    private function calculateRealActiveTimeUsed(SessionActivity $activity, \Carbon\Carbon $endTime): array
+    {
+        $totalTimeInMinutes = abs($endTime->diffInMinutes($activity->started_at));
+        $totalTimeInHours = $totalTimeInMinutes / 60;
+        
+        $totalPauseDurationHours = $activity->getTotalPauseDurationHours();
+        $realDurationHours = max(0, $totalTimeInHours - $totalPauseDurationHours);
+
+        $singleHours = 0;
+        $multiHours = 0;
+
+        if ($activity->isDeviceUse() && $activity->device_id) {
+            $modeChanges = $activity->modeChanges()->orderBy('changed_at', 'asc')->get();
 
             if ($modeChanges->isEmpty()) {
-                // No mode changes recorded - use current mode for entire duration
-                // This handles edge case where mode changes weren't tracked
+                // No mode changes - use current mode for entire duration
                 if ($activity->mode === ActivityMode::SINGLE) {
                     $singleHours = $realDurationHours;
                 } else {
                     $multiHours = $realDurationHours;
                 }
             } else {
-                // Calculate time for each mode period, accounting for pauses
+                // Calculate time for each mode period
                 foreach ($modeChanges as $modeChange) {
                     $periodStart = $modeChange->changed_at;
-                    $periodEnd = $modeChange->ended_at ?? $activity->ended_at;
+                    $periodEnd = $modeChange->ended_at ?? $endTime;
                     
-                    // Calculate raw period duration in minutes
+                    // Don't calculate beyond endTime
+                    if ($periodEnd > $endTime) {
+                        $periodEnd = $endTime;
+                    }
+                    
                     $periodDurationMinutes = abs($periodStart->diffInMinutes($periodEnd));
                     
-                    // Calculate pause overlap with this period
-                    // Get all pauses and check overlap in PHP for better accuracy
+                    // Calculate pause overlap
                     $pauseMinutesInPeriod = 0;
                     foreach ($activity->pauses as $pause) {
                         $pauseStart = $pause->paused_at;
-                        $pauseEnd = $pause->resumed_at ?? $activity->ended_at;
+                        $pauseEnd = $pause->resumed_at ?? $endTime;
                         
-                        // Check if pause overlaps with period
-                        // Overlap exists if pause starts before period ends and pause ends after period starts
                         if ($pauseStart < $periodEnd && $pauseEnd > $periodStart) {
-                            // Calculate overlap between pause and period
                             $overlapStart = $pauseStart > $periodStart ? $pauseStart : $periodStart;
                             $overlapEnd = $pauseEnd < $periodEnd ? $pauseEnd : $periodEnd;
                             
@@ -528,11 +664,9 @@ class SessionActivityService
                         }
                     }
                     
-                    // Active duration for this mode period (excluding pauses)
                     $activeMinutes = max(0, $periodDurationMinutes - $pauseMinutesInPeriod);
                     $activeHours = $activeMinutes / 60;
                     
-                    // Add to appropriate mode counter
                     $modeEnum = ActivityMode::from($modeChange->to_mode);
                     if ($modeEnum === ActivityMode::SINGLE) {
                         $singleHours += $activeHours;
@@ -541,23 +675,91 @@ class SessionActivityService
                     }
                 }
             }
-
-            // Calculate device usage price
-            $deviceUsagePrice = ($singleHours * $singlePricePerHour) + ($multiHours * $multiPricePerHour);
         }
 
-        // Calculate products total for this activity
-        $productsTotal = (float) ($activity->products()->sum('total_price') ?? 0);
-
-        // Total activity price = device usage + products
-        $totalPrice = $deviceUsagePrice + $productsTotal;
-
-        // Model events will automatically recalculate session total when total_price is updated
-        return $this->sessionActivityRepository->update($id, [
-            'duration_hours' => round($realDurationHours, 2),
-            'total_price' => round($totalPrice, 2),
-        ]);
+        return [
+            'totalHours' => $realDurationHours,
+            'singleHours' => $singleHours,
+            'multiHours' => $multiHours,
+        ];
     }
+
+    /**
+     * Calculate device price for a time period with mode periods
+     * 
+     * @param SessionActivity $activity
+     * @param \Carbon\Carbon $startTime
+     * @param \Carbon\Carbon $endTime
+     * @return float
+     */
+    private function calculateDevicePriceForTimePeriod(SessionActivity $activity, \Carbon\Carbon $startTime, \Carbon\Carbon $endTime): float
+    {
+        if (!$activity->isDeviceUse() || !$activity->device_id) {
+            return 0;
+        }
+
+        $device = $activity->device;
+        $singlePricePerHour = (float) $device->price_per_hour;
+        $multiPricePerHour = $device->multi_price 
+            ? (float) $device->multi_price
+            : $singlePricePerHour;
+
+        $timeUsed = $this->calculateRealActiveTimeUsed($activity, $endTime);
+        
+        return ($timeUsed['singleHours'] * $singlePricePerHour) + ($timeUsed['multiHours'] * $multiPricePerHour);
+    }
+
+    /**
+     * Calculate initial price for an activity when creating with duration
+     * 
+     * @param SessionActivity $activity Activity instance
+     * @return float Calculated price
+     */
+    public function calculateActivityPrice(SessionActivity $activity): float
+    {
+        // Unlimited activities have no initial price
+        if (!$activity->ended_at) {
+            return 0;
+        }
+
+        // Non-device activities have no price
+        if (!$activity->isDeviceUse() || !$activity->device_id) {
+            return 0;
+        }
+
+        $device = $activity->device;
+        if (!$device) {
+            return 0;
+        }
+
+        // Get duration from duration_hours or calculate from dates
+        $duration = $activity->duration_hours ?? 
+            ($activity->ended_at->diffInHours($activity->started_at));
+
+        // Get price based on mode
+        $pricePerHour = $activity->mode === ActivityMode::MULTI
+            ? ($device->multi_price ?? $device->price_per_hour)
+            : $device->price_per_hour;
+
+        return round($duration * (float) $pricePerHour, 2);
+    }
+
+    /**
+     * Calculate duration and total price for an activity
+     * Uses ended_at timestamp (not current time) - for activities that have ended
+     * This method is kept for backward compatibility and now calls recalculateActivityPrice()
+     */
+    public function calculateDuration(int $id): bool
+    {
+        $activity = $this->getActivity($id);
+        if (!$activity || !$activity->started_at || !$activity->ended_at) {
+            return false;
+        }
+
+        // Use the unified recalculation method with ended_at
+        return $this->recalculateActivityPrice($id, $activity->ended_at);
+    }
+
 
     /**
      * Get available users for an activity

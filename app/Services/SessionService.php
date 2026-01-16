@@ -136,20 +136,6 @@ class SessionService
                 $activityData['activity_type'] = 'device_use';
                 $activityData['device_id'] = $deviceId;
                 $activityData['mode'] = $mode; // ActivityMode enum instance
-                
-                // Calculate price if duration is provided
-                if ($duration !== null && $duration > 0) {
-                    $device = \App\Models\Device::find($deviceId);
-                    if ($device) {
-                        // Get price based on mode (in Egyptian Pounds)
-                        $pricePerHour = $mode === \App\Enums\ActivityMode::MULTI 
-                            ? ($device->multi_price ?? $device->price_per_hour) 
-                            : $device->price_per_hour;
-                        
-                        // Calculate total price: duration (hours) * price per hour
-                        $activityData['total_price'] = round($duration * (float) $pricePerHour, 2);
-                    }
-                }
             } else {
                 // Chillout session: create pause activity without device
                 $activityData['activity_type'] = 'pause';
@@ -162,6 +148,14 @@ class SessionService
             }
             
             $activity = $this->sessionActivityRepository->create($activityData);
+            
+            // Calculate initial price if activity has duration and is device_use
+            if ($activity && $activity->isDeviceUse() && $duration !== null && $duration > 0) {
+                $calculatedPrice = $this->sessionActivityService->calculateActivityPrice($activity);
+                if ($calculatedPrice > 0) {
+                    $activity->update(['total_price' => $calculatedPrice]);
+                }
+            }
             
             // If activity was created with duration, complete the mode change period
             if ($duration !== null && $duration > 0 && $activity->mode) {
@@ -326,10 +320,10 @@ class SessionService
             $activity->refresh();
             $activity->load('pauses');
 
-            // Calculate duration if activity has started_at and ended_at
+            // Recalculate price if activity has started_at and ended_at
             if ($activity->started_at && $activity->ended_at) {
-                // Use the service method to calculate duration (ensures consistency)
-                $this->sessionActivityService->calculateDuration($activity->id);
+                // Use the service method to recalculate price (ensures consistency)
+                $this->sessionActivityService->recalculateActivityPrice($activity->id, $activityEndTime);
             }
             
             // Free up the device if activity uses a device
@@ -422,6 +416,9 @@ class SessionService
             
             // Update activity status to paused
             $activity->update(['status' => 'paused']);
+            
+            // Recalculate price for each activity based on active time up to pause point
+            $this->sessionActivityService->recalculateActivityPrice($activity->id, $pauseTime);
         }
         
         // Update session status

@@ -128,24 +128,18 @@ class Session extends Model
 
     /**
      * Calculate and update the total price of the session
-     * Total = Sum of all activities' total_price (play time: hours × price_per_hour) 
-     *        + Sum of all products' total_price (product.price × quantity) in those activities
-     * Note: Discount is stored separately and applied when calculating final price (total_price - discount)
+     * Total = Sum of all activities' total_price
+     * Note: Each activity's total_price already includes:
+     *   - Device usage (based on actual active time and mode periods)
+     *   - Products total (sum of all products in that activity)
+     * So we only need to sum activities' total_price, NOT add products separately
+     * Discount is stored separately and applied when calculating final price (total_price - discount)
      */
     public function calculateTotalPrice(): void
     {
-        // Sum of all activities' total_price (already calculated as duration_hours × price_per_hour)
-        $activitiesTotal = (float) ($this->activities()->sum('total_price') ?? 0);
-
-        // Sum of all products' total_price in activities related to this session
-        // Products: sum(product.price × quantity) for all products in all activities
-        $productsTotal = (float) (ActivityProduct::whereHas('sessionActivity', function ($query) {
-            $query->where('session_id', $this->id);
-        })->sum('total_price') ?? 0);
-
-        // Calculate total before discount
-        // Session total = activities total + products total
-        $totalPrice = $activitiesTotal + $productsTotal;
+        // Sum of all activities' total_price
+        // Each activity's total_price already includes device usage + products
+        $totalPrice = (float) ($this->activities()->sum('total_price') ?? 0);
 
         // Update the session's total_price without triggering events to avoid infinite loops
         // Note: discount is stored separately and should be applied when displaying final price
