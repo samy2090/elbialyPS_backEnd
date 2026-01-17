@@ -10,6 +10,7 @@ class SessionRepository implements SessionRepositoryInterface
     public function getAllPaginated(int $perPage = 10): LengthAwarePaginator
     {
         return Session::with(['creator', 'customer', 'activities.device', 'activities.activityUsers.user'])
+            ->latest()
             ->paginate($perPage);
     }
 
@@ -38,6 +39,7 @@ class SessionRepository implements SessionRepositoryInterface
     {
         return Session::where('customer_id', $customerId)
             ->with(['creator', 'customer', 'activities.device', 'activities.activityUsers.user'])
+            ->latest()
             ->paginate($perPage);
     }
 
@@ -45,6 +47,7 @@ class SessionRepository implements SessionRepositoryInterface
     {
         return Session::where('status', $status)
             ->with(['creator', 'customer', 'activities.device', 'activities.activityUsers.user'])
+            ->latest()
             ->paginate($perPage);
     }
 }
