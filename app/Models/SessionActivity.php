@@ -129,7 +129,7 @@ class SessionActivity extends Model
 
         // When an activity is created, record initial mode and recalculate session total
         static::created(function (SessionActivity $activity) {
-            // Record initial mode change
+            // Record initial mode change (ended_at stays null until mode changes or activity ends)
             if ($activity->mode) {
                 ActivityModeChange::create([
                     'session_activity_id' => $activity->id,
@@ -137,6 +137,8 @@ class SessionActivity extends Model
                     'to_mode' => $activity->mode->value,
                     'changed_at' => $activity->started_at ?? now(),
                     'changed_by' => $activity->created_by,
+                    // NOTE: ended_at is NOT set here - it should remain null
+                    // until a mode change occurs or the activity ends/pauses
                 ]);
             }
 
@@ -265,27 +267,44 @@ class SessionActivity extends Model
     }
 
     /**
-     * Get total pause duration in minutes for this activity
-     * Includes both completed pauses and active pauses (pauses without resumed_at)
+     * Get total pause duration in minutes for this activity up to a specific calculation time
+     * 
+     * @param \Carbon\Carbon|null $calculationEndTime The end time for calculation (defaults to now())
+     *        - For paused activities: use the pause time
+     *        - For ended activities: use the actual end time
+     *        - For active activities: use now()
+     * @return float Total pause duration in minutes
      */
-    public function getTotalPauseDurationMinutes(): float
+    public function getTotalPauseDurationMinutes(?\Carbon\Carbon $calculationEndTime = null): float
     {
         $totalMinutes = 0;
+        
+        // Default to now() if no calculation end time provided
+        if ($calculationEndTime === null) {
+            $calculationEndTime = now();
+        }
         
         // Get all pauses for this activity
         $pauses = $this->pauses()->get();
         
         foreach ($pauses as $pause) {
-            if ($pause->pause_duration_minutes !== null) {
-                // Pause duration already calculated
-                $totalMinutes += (float) $pause->pause_duration_minutes;
-            } elseif ($pause->paused_at && $pause->resumed_at) {
-                // Pause has both paused_at and resumed_at but duration not calculated yet
-                $totalMinutes += abs($pause->paused_at->diffInMinutes($pause->resumed_at));
-            } elseif ($pause->paused_at && !$pause->resumed_at) {
-                // Active pause (not resumed yet) - calculate duration up to activity end or now
-                $endTime = $this->ended_at ?? now();
-                $totalMinutes += abs($pause->paused_at->diffInMinutes($endTime));
+            // Skip pauses that started after our calculation end time
+            if ($pause->paused_at > $calculationEndTime) {
+                continue;
+            }
+            
+            if ($pause->resumed_at !== null) {
+                // Completed pause - use actual duration or calculate from timestamps
+                if ($pause->pause_duration_minutes !== null) {
+                    $totalMinutes += (float) $pause->pause_duration_minutes;
+                } else {
+                    $totalMinutes += abs($pause->paused_at->diffInMinutes($pause->resumed_at));
+                }
+            } else {
+                // Active pause (not resumed yet) - calculate duration up to calculation end time
+                // This is the key fix: use calculationEndTime, not ended_at
+                $pauseEnd = $calculationEndTime;
+                $totalMinutes += abs($pause->paused_at->diffInMinutes($pauseEnd));
             }
         }
         
@@ -293,11 +312,14 @@ class SessionActivity extends Model
     }
 
     /**
-     * Get total pause duration in hours for this activity
+     * Get total pause duration in hours for this activity up to a specific calculation time
+     * 
+     * @param \Carbon\Carbon|null $calculationEndTime The end time for calculation
+     * @return float Total pause duration in hours
      */
-    public function getTotalPauseDurationHours(): float
+    public function getTotalPauseDurationHours(?\Carbon\Carbon $calculationEndTime = null): float
     {
-        return round($this->getTotalPauseDurationMinutes() / 60, 2);
+        return round($this->getTotalPauseDurationMinutes($calculationEndTime) / 60, 4);
     }
 
     /**
@@ -311,19 +333,45 @@ class SessionActivity extends Model
     }
 
     /**
-     * Check if activity is currently running (active and not ended)
+     * Check if activity is currently running (status is ACTIVE)
+     * Note: For scheduled activities, ended_at is a future time, so we only check status
      */
     public function isRunning(): bool
     {
-        return $this->status === SessionStatus::ACTIVE && $this->ended_at === null;
+        return $this->status === SessionStatus::ACTIVE;
     }
 
     /**
-     * Check if activity status is paused (paused and not ended)
+     * Check if activity status is paused
+     * Note: For scheduled activities, ended_at is a future time, so we only check status
      */
     public function hasPausedStatus(): bool
     {
-        return $this->status === SessionStatus::PAUSED && $this->ended_at === null;
+        return $this->status === SessionStatus::PAUSED;
+    }
+
+    /**
+     * Check if activity has ended (status is ENDED)
+     */
+    public function hasEndedStatus(): bool
+    {
+        return $this->status === SessionStatus::ENDED;
+    }
+
+    /**
+     * Check if activity has a scheduled end time (duration was set at creation)
+     */
+    public function isScheduled(): bool
+    {
+        return $this->ended_at !== null && $this->status !== SessionStatus::ENDED;
+    }
+
+    /**
+     * Check if activity is unlimited (no predefined end time)
+     */
+    public function isUnlimited(): bool
+    {
+        return $this->ended_at === null || $this->status === SessionStatus::ENDED;
     }
 
     /**

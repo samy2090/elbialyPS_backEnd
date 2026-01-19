@@ -119,6 +119,13 @@ class SessionActivityService
                     'changed_by' => auth()->id(),
                 ]);
                 
+                // IMPORTANT: Update activity's mode in database BEFORE recalculation
+                // This ensures recalculation methods read the NEW mode, not the old one
+                $this->sessionActivityRepository->update($id, ['mode' => $newMode->value]);
+                
+                // Remove mode from $data since we already updated it
+                unset($data['mode']);
+                
                 // Recalculate price immediately after mode change
                 // For scheduled activities (has ended_at), include remaining time
                 // For unlimited activities, just recalculate real time used

@@ -128,21 +128,31 @@ class Session extends Model
 
     /**
      * Calculate and update the total price of the session
-     * Total = Sum of all activities' total_price
-     * Note: Each activity's total_price already includes:
-     *   - Device usage (based on actual active time and mode periods)
-     *   - Products total (sum of all products in that activity)
-     * So we only need to sum activities' total_price, NOT add products separately
-     * Discount is stored separately and applied when calculating final price (total_price - discount)
+     * 
+     * IMPORTANT: Session total = Sum of FINAL prices only (paused or ended activities)
+     * Active activities have ESTIMATED prices which should NOT be included in session total
+     * 
+     * Final price: Activity is paused or ended - price is based on actual played time
+     * Estimated price: Activity is active - includes remaining time estimation
+     * 
+     * Each activity's total_price includes:
+     *   - Device usage (based on mode periods)
+     *   - Products total
+     * 
+     * Discount is stored separately and applied when calculating final price
      */
     public function calculateTotalPrice(): void
     {
-        // Sum of all activities' total_price
-        // Each activity's total_price already includes device usage + products
-        $totalPrice = (float) ($this->activities()->sum('total_price') ?? 0);
+        // Sum only FINAL prices (paused or ended activities)
+        // Active activities have estimated prices and should NOT be included
+        $totalPrice = (float) ($this->activities()
+            ->whereIn('status', [
+                SessionStatus::PAUSED->value,
+                SessionStatus::ENDED->value
+            ])
+            ->sum('total_price') ?? 0);
 
         // Update the session's total_price without triggering events to avoid infinite loops
-        // Note: discount is stored separately and should be applied when displaying final price
         $this->withoutEvents(function () use ($totalPrice) {
             $this->update(['total_price' => $totalPrice]);
         });

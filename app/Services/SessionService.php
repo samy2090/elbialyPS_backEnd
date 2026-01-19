@@ -157,16 +157,11 @@ class SessionService
                 }
             }
             
-            // If activity was created with duration, complete the mode change period
-            if ($duration !== null && $duration > 0 && $activity->mode) {
-                $activeModeChange = $activity->activeModeChange();
-                if ($activeModeChange) {
-                    $activeModeChange->update([
-                        'ended_at' => $activity->ended_at,
-                    ]);
-                    $activeModeChange->calculateDuration();
-                }
-            }
+            // NOTE: Do NOT set ended_at on initial mode change for scheduled activities!
+            // The initial mode change should remain open (ended_at = null) until:
+            // 1. A mode change occurs (then old period ends)
+            // 2. The activity is paused/ended (then we calculate based on actual time)
+            // Setting ended_at to the scheduled future time was the bug causing incorrect pricing
             
             // Automatically add the customer to the activity_user table for all activities
             if ($activity && $session->customer_id) {
