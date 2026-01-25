@@ -223,13 +223,14 @@ class SessionService
     }
 
     /**
-     * Get active activities for a session
+     * Get all non-ended activities for a session (active, paused, or any status except ended)
      */
     public function getActiveActivities(int $sessionId): \Illuminate\Database\Eloquent\Collection
     {
         return $this->sessionActivityRepository->getBySessionId($sessionId)
             ->filter(function ($activity) {
-                return $activity->ended_at === null;
+                // Get all activities that are not ended (status != ENDED)
+                return $activity->status !== \App\Enums\SessionStatus::ENDED;
             })
             ->values();
     }
@@ -249,28 +250,28 @@ class SessionService
             return ['success' => true, 'message' => 'Session is already ended'];
         }
 
-        // Check for active activities
-        $activeActivities = $this->getActiveActivities($id);
+        // Step 2: Get all non-ended activities and end them
+        $nonEndedActivities = $this->getActiveActivities($id);
         
-        // Automatically end all active activities when ending a session
+        // Automatically end all non-ended activities when ending a session
         // No confirmation required - ending a session should end all activities
 
-        // Step 2: End each activity individually
         $endTime = now();
         $activityEndTimes = [];
         $allRunning = true;
         $allPaused = true;
         $maxPausedAt = null;
 
-        foreach ($activeActivities as $activity) {
-            // Skip if already ended
+        // End each activity using the proper service method to ensure all logic is executed
+        foreach ($nonEndedActivities as $activity) {
+            // Skip if already ended (shouldn't happen, but safety check)
             if ($activity->status === \App\Enums\SessionStatus::ENDED) {
                 continue;
             }
 
+            // Determine end time based on activity state (before ending)
             $activityEndTime = null;
-
-            // Determine end time based on activity state
+            
             if ($activity->isRunning()) {
                 // Activity is running: end_at = now
                 $activityEndTime = $endTime;
@@ -291,59 +292,46 @@ class SessionService
                 }
                 $allRunning = false;
             } else {
-                // Fallback: use now
+                // Fallback: use now for any other status
                 $activityEndTime = $endTime;
                 $allPaused = false;
             }
 
-            // If activity is currently paused, complete the active pause record
-            $activePause = $activity->activePause();
-            if ($activePause) {
-                $activePause->update([
-                    'resumed_at' => $activityEndTime,
-                ]);
-                $activePause->calculateDuration();
-            }
-
-            // Update activity with end time and status
-            $activity->update([
-                'ended_at' => $activityEndTime,
-                'status' => 'ended',
+            // Use the proper endActivity method to ensure all logic is executed
+            // This handles: completing pauses, mode changes, price recalculation, device freeing, etc.
+            // Skip session check to prevent recursive calls when ending session
+            $ended = $this->sessionActivityService->endActivity($activity->id, $id, [
+                'skip_session_check' => true
             ]);
 
-            // Refresh activity to get updated pause data
-            $activity->refresh();
-            $activity->load('pauses');
-
-            // Recalculate price if activity has started_at and ended_at
-            if ($activity->started_at && $activity->ended_at) {
-                // Use the service method to recalculate price (ensures consistency)
-                $this->sessionActivityService->recalculateActivityPrice($activity->id, $activityEndTime);
-            }
-            
-            // Free up the device if activity uses a device
-            if ($activity->isDeviceUse() && $activity->device_id) {
-                $device = \App\Models\Device::find($activity->device_id);
+            if ($ended) {
+                // Refresh activity to get updated data
+                $activity->refresh();
                 
-                if ($device) {
-                    // Check if device has other active activities (not ended) in any session
-                    $hasOtherActiveActivities = \App\Models\SessionActivity::where('device_id', $activity->device_id)
-                        ->where('id', '!=', $activity->id)
-                        ->where('status', '!=', \App\Enums\SessionStatus::ENDED->value)
-                        ->whereNull('ended_at')
-                        ->exists();
-                    
-                    // Only mark as AVAILABLE if no other activities are using it
-                    if (!$hasOtherActiveActivities) {
-                        $device->update(['status' => \App\Enums\DeviceStatus::AVAILABLE->value]);
-                    }
+                // Store the end time for session end time calculation
+                if ($activity->ended_at) {
+                    $activityEndTimes[] = $activity->ended_at;
+                } else {
+                    // Fallback if ended_at is not set
+                    $activityEndTimes[] = $activityEndTime;
                 }
+            } else {
+                // If ending failed, still track the intended end time
+                $activityEndTimes[] = $activityEndTime;
             }
-
-            $activityEndTimes[] = $activityEndTime;
         }
 
-        // Step 3: Calculate session end_at
+        // Step 3: Verify all activities are ended
+        $remainingNonEndedActivities = $this->getActiveActivities($id);
+        if ($remainingNonEndedActivities->count() > 0) {
+            return [
+                'success' => false,
+                'message' => 'Failed to end all activities. Session cannot be ended while it contains active or paused activities.',
+                'remaining_activities_count' => $remainingNonEndedActivities->count(),
+            ];
+        }
+
+        // Step 4: Calculate session end_at
         $sessionEndTime = null;
         
         if (count($activityEndTimes) === 0) {
@@ -360,7 +348,7 @@ class SessionService
             $sessionEndTime = $endTime;
         }
 
-        // Step 4: Finalize session
+        // Step 5: Finalize session
         $updateData = [
             'status' => 'ended',
             'ended_at' => $sessionEndTime,
@@ -379,8 +367,8 @@ class SessionService
 
         return [
             'success' => true,
-            'message' => 'Session ended successfully',
-            'ended_activities_count' => $activeActivities->count(),
+            'message' => 'Session ended successfully. All activities have been ended.',
+            'ended_activities_count' => $nonEndedActivities->count(),
         ];
     }
 

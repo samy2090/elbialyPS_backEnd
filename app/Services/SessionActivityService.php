@@ -371,6 +371,11 @@ class SessionActivityService
 
     /**
      * End an activity
+     * 
+     * @param int $id Activity ID
+     * @param int $sessionId Session ID
+     * @param array $data Optional data (can include 'skip_session_check' => true to prevent session end check)
+     * @return bool
      */
     public function endActivity(int $id, int $sessionId, array $data = []): bool
     {
@@ -392,8 +397,11 @@ class SessionActivityService
             return false;
         }
         
-        // Check if session should be ended
-        $this->checkAndEndSessionIfNeeded($sessionId);
+        // Check if session should be ended (unless explicitly skipped)
+        $skipSessionCheck = isset($data['skip_session_check']) && $data['skip_session_check'] === true;
+        if (!$skipSessionCheck) {
+            $this->checkAndEndSessionIfNeeded($sessionId);
+        }
         
         // Model events will handle session total recalculation automatically
         return true;
@@ -714,6 +722,288 @@ class SessionActivityService
         $timeUsed = $this->calculateRealActiveTimeUsed($activity, $endTime);
         
         return ($timeUsed['singleHours'] * $singlePricePerHour) + ($timeUsed['multiHours'] * $multiPricePerHour);
+    }
+
+    /**
+     * Get activity history: chronological timeline of mode segments, pauses, product additions, and end.
+     * Uses getActivity, mode changes, pauses, and products. Reuses device pricing logic.
+     *
+     * @param int $activityId Activity ID
+     * @param int|null $sessionId Optional session ID to validate activity belongs to session
+     * @return array{activity_id: int, history: array<int, array>, total_price: float}|null null if activity not found
+     */
+    public function getActivityHistory(int $activityId, ?int $sessionId = null): ?array
+    {
+        $this->autoEndExpiredActivities();
+
+        $activity = $sessionId !== null
+            ? $this->sessionActivityRepository->getByIdAndSessionId($activityId, $sessionId)
+            : $this->getActivity($activityId);
+
+        if (!$activity || !$activity->started_at) {
+            return null;
+        }
+
+        $activity->load(['pauses', 'modeChanges', 'products.product', 'products.orderedByUser', 'device']);
+
+        $isEnded = $activity->status === SessionStatus::ENDED;
+        $endTime = $activity->ended_at ?? now();
+        if ($endTime > now() && !$isEnded) {
+            $endTime = now();
+        }
+
+        $segments = $this->buildHistorySegments($activity, $endTime, $isEnded);
+        $productEvents = $this->buildHistoryProductEvents($activity);
+        $history = $this->mergeAndSortHistory($segments, $productEvents, $endTime, $isEnded);
+
+        return [
+            'activity_id' => $activity->id,
+            'history' => $history,
+            'total_price' => (float) ($activity->total_price ?? 0),
+        ];
+    }
+
+    /**
+     * Build mode/pause segments from mode changes and pauses. Splits mode periods by pauses.
+     * When activity is not ended, the last segment (extending to "now") uses "to": "now" and "ongoing": true.
+     *
+     * @return array<int, array{type: 'mode'|'paused', mode?: string, from: string, to: string, price: float, duration_minutes: float, ongoing?: bool}>
+     */
+    private function buildHistorySegments(SessionActivity $activity, \Carbon\Carbon $endTime, bool $isEnded): array
+    {
+        $modePeriods = $this->getModePeriodsFromChanges($activity, $endTime);
+        $pausePeriods = $this->getPausePeriods($activity, $endTime);
+        $rawSegments = $this->splitModePeriodsByPauses($modePeriods, $pausePeriods);
+
+        $result = [];
+        foreach ($rawSegments as $seg) {
+            $from = $seg['from'];
+            $to = $seg['to'];
+            $durationMinutes = abs($from->diffInMinutes($to));
+            $ongoing = !$isEnded && $to->eq($endTime);
+
+            $toDisplay = $ongoing ? 'now' : $to->toIso8601String();
+            $entry = [
+                'from' => $from->toIso8601String(),
+                'to' => $toDisplay,
+                'duration_minutes' => round($durationMinutes, 2),
+            ];
+            if ($ongoing) {
+                $entry['ongoing'] = true;
+            }
+
+            if ($seg['type'] === 'paused') {
+                $result[] = array_merge(['type' => 'paused', 'price' => 0.0], $entry);
+                continue;
+            }
+
+            $mode = ActivityMode::from($seg['mode']);
+            $price = $this->getSegmentPriceForMode($activity, $mode, $from, $to);
+            $result[] = array_merge(['type' => 'mode', 'mode' => $seg['mode'], 'price' => round($price, 2)], $entry);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get contiguous mode periods from ActivityModeChange records.
+     *
+     * @return array<int, array{from: \Carbon\Carbon, to: \Carbon\Carbon, mode: string}>
+     */
+    private function getModePeriodsFromChanges(SessionActivity $activity, \Carbon\Carbon $endTime): array
+    {
+        $modeChanges = $activity->modeChanges()->orderBy('changed_at', 'asc')->get();
+
+        if ($modeChanges->isEmpty()) {
+            $mode = $activity->mode?->value ?? ActivityMode::SINGLE->value;
+            return [[
+                'from' => $activity->started_at->copy(),
+                'to' => $endTime->copy(),
+                'mode' => $mode,
+            ]];
+        }
+
+        $periods = [];
+        foreach ($modeChanges as $mc) {
+            $from = $mc->changed_at->copy();
+            $to = ($mc->ended_at ?? $endTime)->copy();
+            if ($to > $endTime) {
+                $to = $endTime->copy();
+            }
+            if ($from >= $to) {
+                continue;
+            }
+            $periods[] = ['from' => $from, 'to' => $to, 'mode' => $mc->to_mode];
+        }
+
+        return $periods;
+    }
+
+    /**
+     * Get pause periods [paused_at, resumed_at ?? endTime].
+     *
+     * @return array<int, array{from: \Carbon\Carbon, to: \Carbon\Carbon}>
+     */
+    private function getPausePeriods(SessionActivity $activity, \Carbon\Carbon $endTime): array
+    {
+        $periods = [];
+        foreach ($activity->pauses as $pause) {
+            $from = $pause->paused_at->copy();
+            $to = ($pause->resumed_at ?? $endTime)->copy();
+            if ($to > $endTime) {
+                $to = $endTime->copy();
+            }
+            if ($from >= $to) {
+                continue;
+            }
+            $periods[] = ['from' => $from, 'to' => $to];
+        }
+        return $periods;
+    }
+
+    /**
+     * Split mode periods by pause intervals. Outputs non-overlapping segments (mode or paused).
+     *
+     * @param array<int, array{from: \Carbon\Carbon, to: \Carbon\Carbon, mode: string}> $modePeriods
+     * @param array<int, array{from: \Carbon\Carbon, to: \Carbon\Carbon}> $pausePeriods
+     * @return array<int, array{type: 'mode'|'paused', from: \Carbon\Carbon, to: \Carbon\Carbon, mode?: string}>
+     */
+    private function splitModePeriodsByPauses(array $modePeriods, array $pausePeriods): array
+    {
+        $out = [];
+
+        foreach ($modePeriods as $period) {
+            $stack = [['from' => $period['from'], 'to' => $period['to'], 'mode' => $period['mode']]];
+
+            foreach ($pausePeriods as $pause) {
+                $next = [];
+                foreach ($stack as $seg) {
+                    if (isset($seg['type']) && $seg['type'] === 'paused') {
+                        $next[] = $seg;
+                        continue;
+                    }
+                    $ps = $pause['from'];
+                    $pe = $pause['to'];
+                    $ms = $seg['from'];
+                    $me = $seg['to'];
+
+                    if (!($ps < $me && $pe > $ms)) {
+                        $next[] = $seg;
+                        continue;
+                    }
+
+                    $os = $ps > $ms ? $ps : $ms;
+                    $oe = $pe < $me ? $pe : $me;
+
+                    if ($ms < $os) {
+                        $next[] = ['from' => $ms, 'to' => $os, 'mode' => $seg['mode']];
+                    }
+                    $next[] = ['type' => 'paused', 'from' => $os, 'to' => $oe];
+                    if ($oe < $me) {
+                        $next[] = ['from' => $oe, 'to' => $me, 'mode' => $seg['mode']];
+                    }
+                }
+                $stack = $next;
+            }
+
+            foreach ($stack as $seg) {
+                if (isset($seg['type']) && $seg['type'] === 'paused') {
+                    $out[] = $seg;
+                } else {
+                    $out[] = ['type' => 'mode', 'from' => $seg['from'], 'to' => $seg['to'], 'mode' => $seg['mode'] ?? ActivityMode::SINGLE->value];
+                }
+            }
+        }
+
+        usort($out, function ($a, $b) {
+            return $a['from'] <=> $b['from'];
+        });
+
+        return $out;
+    }
+
+    /**
+     * Build product-add events for history.
+     *
+     * @return array<int, array{type: 'product', at: string, quantity: int, product_name: string, user_id: int, user_name: string, price: float}>
+     */
+    private function buildHistoryProductEvents(SessionActivity $activity): array
+    {
+        $events = [];
+        foreach ($activity->products as $ap) {
+            $product = $ap->product;
+            $user = $ap->orderedByUser;
+            $events[] = [
+                'type' => 'product',
+                'at' => $ap->created_at->toIso8601String(),
+                'quantity' => (int) $ap->quantity,
+                'product_name' => $product ? $product->name : 'Unknown',
+                'user_id' => (int) $ap->ordered_by_user_id,
+                'user_name' => $user ? $user->name : 'Unknown',
+                'price' => round((float) $ap->total_price, 2),
+            ];
+        }
+        usort($events, function ($a, $b) {
+            return $a['at'] <=> $b['at'];
+        });
+        return $events;
+    }
+
+    /**
+     * Merge segments and product events, sort by time. Add "end" only when activity has ended.
+     *
+     * @param array<int, array> $segments
+     * @param array<int, array> $productEvents
+     * @return array<int, array>
+     */
+    private function mergeAndSortHistory(array $segments, array $productEvents, \Carbon\Carbon $endTime, bool $isEnded): array
+    {
+        $items = [];
+
+        foreach ($segments as $s) {
+            $items[] = ['sort_at' => $s['from'], 'payload' => $s];
+        }
+        foreach ($productEvents as $e) {
+            $items[] = ['sort_at' => $e['at'], 'payload' => $e];
+        }
+
+        usort($items, function ($a, $b) {
+            return $a['sort_at'] <=> $b['sort_at'];
+        });
+
+        $history = array_map(fn ($x) => $x['payload'], $items);
+
+        if ($isEnded) {
+            $history[] = [
+                'type' => 'end',
+                'at' => $endTime->toIso8601String(),
+            ];
+        }
+
+        return $history;
+    }
+
+    /**
+     * Price for a single segment (mode + time range). Uses device single/multi price.
+     * Same pricing logic as recalculateActivityPrice per-mode calculation.
+     */
+    private function getSegmentPriceForMode(SessionActivity $activity, ActivityMode $mode, \Carbon\Carbon $from, \Carbon\Carbon $to): float
+    {
+        if (!$activity->isDeviceUse() || !$activity->device_id) {
+            return 0.0;
+        }
+
+        $device = $activity->device;
+        if (!$device) {
+            return 0.0;
+        }
+
+        $pricePerHour = $mode === ActivityMode::MULTI
+            ? (float) ($device->multi_price ?? $device->price_per_hour)
+            : (float) $device->price_per_hour;
+
+        $durationHours = abs($from->diffInMinutes($to)) / 60;
+        return $durationHours * $pricePerHour;
     }
 
     /**

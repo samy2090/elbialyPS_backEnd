@@ -101,6 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Session Activities management routes
     Route::prefix('sessions/{sessionId}/activities')->middleware('admin_or_staff')->group(function () {
         Route::get('/', [SessionActivityController::class, 'index']); // List activities in session
+        Route::get('/{id}/history', [SessionActivityController::class, 'getActivityHistory']); // Activity history (mode/pause/products timeline)
         Route::get('/{id}', [SessionActivityController::class, 'show']); // Show specific activity
         Route::get('/type/{type}', [SessionActivityController::class, 'getByType']); // Get activities by type
         

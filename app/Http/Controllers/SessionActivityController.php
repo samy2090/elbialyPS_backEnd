@@ -45,6 +45,20 @@ class SessionActivityController extends Controller
     }
 
     /**
+     * Get activity history: chronological timeline of mode segments, pauses, product additions, and end.
+     */
+    public function getActivityHistory(int $sessionId, int $id): JsonResponse
+    {
+        $history = $this->sessionActivityService->getActivityHistory($id, $sessionId);
+
+        if ($history === null) {
+            return response()->json(['message' => 'Activity not found in this session'], Response::HTTP_NOT_FOUND);
+        }
+
+        return response()->json($history);
+    }
+
+    /**
      * Store a newly created activity.
      */
     public function store(int $sessionId, CreateSessionActivityRequest $request): JsonResponse
