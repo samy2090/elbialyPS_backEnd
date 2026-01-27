@@ -76,10 +76,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Routes accessible by both Admin and Staff (read-only for staff)
         Route::middleware('admin_or_staff')->group(function () {
             Route::get('/', [SessionController::class, 'index']); // List sessions
-            Route::get('/{id}', [SessionController::class, 'show']); // Show single session
-            Route::get('/{id}/users', [SessionController::class, 'getSessionUsers']); // Get users in session
+            Route::get('/date/{date}', [SessionController::class, 'getByStartDate']); // Get sessions by start date (Y-m-d format)
             Route::get('/customer/{customerId}', [SessionController::class, 'getByCustomer']); // Get customer sessions
             Route::get('/status/{status}', [SessionController::class, 'getByStatus']); // Get sessions by status
+            Route::get('/{id}', [SessionController::class, 'show']); // Show single session
+            Route::get('/{id}/users', [SessionController::class, 'getSessionUsers']); // Get users in session
         });
         
         // Routes accessible only by Admin (full CRUD operations)

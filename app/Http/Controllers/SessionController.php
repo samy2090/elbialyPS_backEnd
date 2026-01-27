@@ -100,6 +100,44 @@ class SessionController extends Controller
     }
 
     /**
+     * Get sessions by start date or date range.
+     * 
+     * Single date: GET /api/sessions/date/2025-01-27
+     * Date range: GET /api/sessions/date/2025-01-27?end_date=2025-01-30
+     * 
+     * Date format: Y-m-d (e.g., 2025-01-27)
+     */
+    public function getByStartDate(Request $request, string $date): JsonResponse
+    {
+        $endDate = $request->get('end_date');
+        
+        // Validate date format
+        $validationRules = [
+            'date' => 'required|date_format:Y-m-d',
+        ];
+        
+        $validationData = ['date' => $date];
+        
+        if ($endDate) {
+            $validationRules['end_date'] = 'required|date_format:Y-m-d|after_or_equal:date';
+            $validationData['end_date'] = $endDate;
+        }
+        
+        $validator = \Validator::make($validationData, $validationRules);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Invalid date format or date range. Use Y-m-d format (e.g., 2025-01-27). End date must be after or equal to start date.',
+                'errors' => $validator->errors()
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
+        $perPage = $request->get('per_page', 10);
+        $sessions = $this->sessionService->getSessionsByStartDate($date, $endDate, $perPage);
+        return response()->json($sessions);
+    }
+
+    /**
      * End a session.
      */
     public function end(int $id, Request $request): JsonResponse

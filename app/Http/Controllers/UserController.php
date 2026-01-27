@@ -18,6 +18,10 @@ class UserController extends Controller
 {
     /**
      * Display a listing of the users.
+     * 
+     * Supports optional pagination via paginate=true or paginate=1 query parameter.
+     * When pagination is enabled, accepts per_page (default: 10) and page query parameters.
+     * When pagination is disabled, returns all users limited to a safe maximum (500).
      */
     public function index(Request $request): JsonResponse
     {
@@ -41,14 +45,36 @@ class UserController extends Controller
             });
         }
         
-        // Pagination
-        $perPage = $request->get('per_page', 15);
-        $users = $query->latest()->paginate($perPage);
+        // Apply sorting
+        $query->latest();
         
-        return response()->json([
-            'status' => 'success',
-            'data' => $users
-        ]);
+        // Check if pagination is requested
+        if ($request->boolean('paginate')) {
+            // Paginated response
+            $perPage = min((int) $request->get('per_page', 10), 100); // Max 100 per page
+            $perPage = max($perPage, 1); // Minimum 1 per page
+            
+            $users = $query->paginate($perPage);
+            
+            // Laravel's paginator automatically includes pagination metadata when serialized
+            return response()->json([
+                'status' => 'success',
+                'data' => $users
+            ]);
+        } else {
+            // Non-paginated response with safe maximum limit
+            $maxLimit = 500; // Safe maximum to prevent memory issues
+            $users = $query->limit($maxLimit)->get();
+            
+            return response()->json([
+                'status' => 'success',
+                'data' => $users,
+                'count' => $users->count(),
+                'note' => $users->count() >= $maxLimit 
+                    ? "Results limited to {$maxLimit} records. Use paginate=true for full results." 
+                    : null
+            ]);
+        }
     }
 
     /**

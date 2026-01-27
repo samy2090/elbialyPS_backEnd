@@ -50,4 +50,24 @@ class SessionRepository implements SessionRepositoryInterface
             ->latest()
             ->paginate($perPage);
     }
+
+    public function getByStartDate(string $date, ?string $endDate = null, int $perPage = 10): LengthAwarePaginator
+    {
+        $query = Session::with(['creator', 'customer', 'activities.device', 'activities.activityUsers.user']);
+
+        if ($endDate) {
+            // Date range: from start date to end date (inclusive)
+            // Start: beginning of start date (00:00:00)
+            // End: end of end date (23:59:59)
+            $query->whereBetween('started_at', [
+                $date . ' 00:00:00',
+                $endDate . ' 23:59:59'
+            ]);
+        } else {
+            // Single date: only sessions that started on this specific day
+            $query->whereDate('started_at', $date);
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
 }

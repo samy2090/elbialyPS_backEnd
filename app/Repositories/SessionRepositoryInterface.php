@@ -14,4 +14,5 @@ interface SessionRepositoryInterface
     public function delete(int $id): bool;
     public function getByCustomerId(int $customerId, int $perPage = 10): LengthAwarePaginator;
     public function getByStatus(string $status, int $perPage = 10): LengthAwarePaginator;
+    public function getByStartDate(string $date, ?string $endDate = null, int $perPage = 10): LengthAwarePaginator;
 }

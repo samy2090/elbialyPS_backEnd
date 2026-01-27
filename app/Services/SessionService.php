@@ -222,6 +222,11 @@ class SessionService
         return $this->sessionRepository->getByStatus($status, $perPage);
     }
 
+    public function getSessionsByStartDate(string $date, ?string $endDate = null, int $perPage = 10): LengthAwarePaginator
+    {
+        return $this->sessionRepository->getByStartDate($date, $endDate, $perPage);
+    }
+
     /**
      * Get all non-ended activities for a session (active, paused, or any status except ended)
      */
