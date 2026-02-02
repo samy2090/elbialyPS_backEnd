@@ -13,6 +13,26 @@ class ProductRepository implements ProductRepositoryInterface
         return Product::paginate($perPage);
     }
 
+    public function getFiltered(?string $search = null, bool $paginate = true, int $perPage = 10): LengthAwarePaginator|Collection
+    {
+        $query = Product::query();
+
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('sku', 'like', "%{$search}%");
+            });
+        }
+
+        $query->orderBy('name');
+
+        if ($paginate) {
+            return $query->paginate($perPage);
+        }
+
+        return $query->limit(500)->get();
+    }
+
     public function getById(int $id): ?Product
     {
         return Product::find($id);

@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('sku')->unique();
             $table->text('note')->nullable();
-            $table->enum('category', ['drink', 'snack']);
+            $table->enum('category', ['drink', 'snack','food','other']);
             $table->decimal('price', 8, 2);
             $table->decimal('cost', 8, 2)->nullable();
             $table->boolean('is_active')->default(true);

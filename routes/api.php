@@ -31,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/', [UserController::class, 'store']); // Create user
             Route::put('/{user}', [UserController::class, 'update']); // Update user
             Route::patch('/{user}', [UserController::class, 'update']); // Partial update user
+            Route::post('/{user}', [UserController::class, 'update']); // Update user (POST with _method=PATCH for file uploads)
             Route::delete('/{user}', [UserController::class, 'destroy']); // Soft delete user
             Route::post('/{id}/restore', [UserController::class, 'restore']); // Restore soft deleted user
             Route::delete('/{id}/force', [UserController::class, 'forceDelete']); // Permanently delete user

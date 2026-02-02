@@ -6,6 +6,7 @@ use App\Http\Requests\CreateProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Services\ProductService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class ProductController extends Controller
@@ -19,11 +20,36 @@ class ProductController extends Controller
 
     /**
      * Display a listing of the products.
+     *
+     * Query parameters (optional):
+     * - search: filter by product name or SKU (partial match)
+     * - paginate: when true/1, returns paginated results; otherwise returns all (max 500)
+     * - per_page: items per page when paginated (default: 10, max: 100)
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $products = $this->productService->getAllProducts();
-        return response()->json($products);
+        $search = $request->filled('search') ? trim($request->search) : null;
+
+        if ($request->boolean('paginate')) {
+            $perPage = min((int) $request->get('per_page', 10), 100);
+            $perPage = max($perPage, 1);
+            $products = $this->productService->getFilteredProducts($search, true, $perPage);
+            return response()->json([
+                'status' => 'success',
+                'data' => $products,
+            ]);
+        }
+
+        $maxLimit = 500;
+        $products = $this->productService->getFilteredProducts($search, false, $maxLimit);
+        return response()->json([
+            'status' => 'success',
+            'data' => $products,
+            'count' => $products->count(),
+            'note' => $products->count() >= $maxLimit
+                ? "Results limited to {$maxLimit} records. Use paginate=true for full results."
+                : null,
+        ]);
     }
 
     /**
