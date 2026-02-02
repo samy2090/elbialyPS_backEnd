@@ -26,13 +26,12 @@ class StoreUserRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255', 'unique:users,username'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['nullable', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'phone' => ['required', 'string', 'max:20'],
+            'phone' => ['required', 'string', 'max:20', Rule::unique('users', 'phone')],
             'role_id' => ['required', 'integer', 'exists:roles,id'],
             'status' => ['sometimes', Rule::in(UserStatus::values())],
-            'avatar' => ['nullable', 'string', 'max:255'],
+            'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ];
     }
 
@@ -45,17 +44,18 @@ class StoreUserRequest extends FormRequest
     {
         return [
             'name.required' => 'The name field is required.',
-            'username.required' => 'The username field is required.',
-            'username.unique' => 'This username is already taken.',
-            'email.required' => 'The email field is required.',
             'email.email' => 'Please enter a valid email address.',
             'email.unique' => 'This email is already registered.',
             'password.required' => 'The password field is required.',
             'password.confirmed' => 'The password confirmation does not match.',
             'phone.required' => 'The phone field is required.',
+            'phone.unique' => 'This phone number is already in use.',
             'role_id.required' => 'The role field is required.',
             'role_id.exists' => 'The selected role is invalid.',
             'status.in' => 'The selected status is invalid.',
+            'avatar.image' => 'The avatar must be an image (jpeg, png, jpg, gif, or webp).',
+            'avatar.mimes' => 'The avatar must be a file of type: jpeg, png, jpg, gif, webp.',
+            'avatar.max' => 'The avatar may not be greater than 2 MB.',
         ];
     }
 

@@ -27,17 +27,8 @@ class AuthService implements AuthServiceInterface
             throw ValidationException::withMessages(['email' => ['Email already in use']]);
         }
 
-        // Generate username based on available information
-        if (!empty($data['email'])) {
-            // Generate username from email (part before @)
-            $username = $this->generateUsernameFromEmail($data['email']);
-        } else {
-            // Generate random 8-character username if only phone is provided
-            $username = $this->generateRandomUsername();
-        }
-
-        // Ensure username is unique
-        $username = $this->ensureUniqueUsername($username);
+        // Generate username (from email part before @, or random) and ensure unique
+        $username = $this->generateUniqueUsername($data['email'] ?? null);
 
         // Get the customer role
         $customerRole = \App\Models\Role::where('name', 'customer')->first();
@@ -50,6 +41,7 @@ class AuthService implements AuthServiceInterface
             'phone' => $data['phone'],
             'role_id' => $customerRole?->id, // Default role is customer
             'status' => UserStatus::ACTIVE->value, // Default status
+            'avatar' => \App\Models\User::DEFAULT_AVATAR,
         ];
 
         $user = $this->users->create($userData);
@@ -82,6 +74,7 @@ class AuthService implements AuthServiceInterface
         // Update last login timestamp
         $user->update(['last_login_at' => now()]);
 
+        $user->load('role');
         $token = $user->createToken('api-token')->plainTextToken;
 
         return ['user' => $user, 'token' => $token];
@@ -93,6 +86,18 @@ class AuthService implements AuthServiceInterface
         if ($token) {
             $token->delete();
         }
+    }
+
+    /**
+     * Generate a unique username from optional email (same logic as registration).
+     * If email given: username = part before @. If not: random 8-char. Then ensured unique.
+     */
+    public function generateUniqueUsername(?string $email): string
+    {
+        $username = !empty($email)
+            ? $this->generateUsernameFromEmail($email)
+            : $this->generateRandomUsername();
+        return $this->ensureUniqueUsername($username);
     }
 
     /**

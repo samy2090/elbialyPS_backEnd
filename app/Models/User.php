@@ -8,12 +8,25 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens, SoftDeletes;
+
+    /** Default avatar path for new users (funny placeholder). */
+    public const DEFAULT_AVATAR = 'avatars/default.png';
+
+    /** Preset avatar paths users can choose from (plus upload). */
+    public const PRESET_AVATARS = [
+        'avatars/default.png',
+        'avatars/avatar1.svg',
+        'avatars/avatar2.svg',
+        'avatars/avatar3.svg',
+        'avatars/avatar4.svg',
+    ];
 
     /**
      * The attributes that are mass assignable.
@@ -28,6 +41,7 @@ class User extends Authenticatable
         'phone',
         'role_id',
         'status',
+        'avatar',
         'last_login_at',
         'created_by',
         'updated_by',
@@ -56,6 +70,24 @@ class User extends Authenticatable
             'password' => 'hashed',
             'status' => UserStatus::class,
         ];
+    }
+
+    /**
+     * Get the attributes that should be appended to model arrays/JSON.
+     *
+     * @var list<string>
+     */
+    protected $appends = ['avatar_url'];
+
+    /**
+     * Get the full URL for the user's avatar.
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        if (!$this->avatar) {
+            return null;
+        }
+        return Storage::disk('public')->url($this->avatar);
     }
 
     /**
