@@ -13,6 +13,18 @@ use App\Repositories\SessionRepositoryInterface;
 use App\Repositories\SessionRepository;
 use App\Repositories\SessionActivityRepositoryInterface;
 use App\Repositories\SessionActivityRepository;
+use App\Repositories\ExpenseCategoryRepositoryInterface;
+use App\Repositories\ExpenseCategoryRepository;
+use App\Repositories\ExpenseRepositoryInterface;
+use App\Repositories\ExpenseRepository;
+use App\Repositories\ExpenseRecurrenceRepositoryInterface;
+use App\Repositories\ExpenseRecurrenceRepository;
+use App\Models\Expense;
+use App\Models\ExpenseCategory;
+use App\Models\ExpenseAttachment;
+use App\Observers\ExpenseObserver;
+use App\Observers\ExpenseCategoryObserver;
+use App\Observers\ExpenseAttachmentObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ProductRepositoryInterface::class, ProductRepository::class);
         $this->app->bind(SessionRepositoryInterface::class, SessionRepository::class);
         $this->app->bind(SessionActivityRepositoryInterface::class, SessionActivityRepository::class);
+        
+        // Expense management repositories
+        $this->app->bind(ExpenseCategoryRepositoryInterface::class, ExpenseCategoryRepository::class);
+        $this->app->bind(ExpenseRepositoryInterface::class, ExpenseRepository::class);
+        $this->app->bind(ExpenseRecurrenceRepositoryInterface::class, ExpenseRecurrenceRepository::class);
     }
 
     /**
@@ -33,7 +50,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Register expense management observers
+        Expense::observe(ExpenseObserver::class);
+        ExpenseCategory::observe(ExpenseCategoryObserver::class);
+        ExpenseAttachment::observe(ExpenseAttachmentObserver::class);
     }
 }
 

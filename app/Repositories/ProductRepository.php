@@ -13,7 +13,7 @@ class ProductRepository implements ProductRepositoryInterface
         return Product::paginate($perPage);
     }
 
-    public function getFiltered(?string $search = null, bool $paginate = true, int $perPage = 10): LengthAwarePaginator|Collection
+    public function getFiltered(?string $search = null, ?string $category = null, bool $paginate = true, int $perPage = 10): LengthAwarePaginator|Collection
     {
         $query = Product::query();
 
@@ -22,6 +22,10 @@ class ProductRepository implements ProductRepositoryInterface
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('sku', 'like', "%{$search}%");
             });
+        }
+
+        if (!empty($category)) {
+            $query->where('category', $category);
         }
 
         $query->orderBy('name');

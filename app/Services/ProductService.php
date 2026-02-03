@@ -21,17 +21,30 @@ class ProductService
     }
 
     /**
-     * Get products with optional search filter (name or SKU) and optional pagination.
+     * Get products with optional search filter (name or SKU), optional category filter, and optional pagination.
      * @return LengthAwarePaginator|\Illuminate\Database\Eloquent\Collection
      */
-    public function getFilteredProducts(?string $search = null, bool $paginate = true, int $perPage = 10): LengthAwarePaginator|\Illuminate\Database\Eloquent\Collection
+    public function getFilteredProducts(?string $search = null, ?string $category = null, bool $paginate = true, int $perPage = 10): LengthAwarePaginator|\Illuminate\Database\Eloquent\Collection
     {
-        return $this->productRepository->getFiltered($search, $paginate, $perPage);
+        return $this->productRepository->getFiltered($search, $category, $paginate, $perPage);
     }
 
     public function getProduct(int $id): ?Product
     {
         return $this->productRepository->getById($id);
+    }
+
+    /**
+     * Get distinct product categories (for expense UI: filter products by category).
+     */
+    public function getProductCategories(): array
+    {
+        return Product::select('category')
+            ->distinct()
+            ->orderBy('category')
+            ->pluck('category')
+            ->values()
+            ->toArray();
     }
 
     public function createProduct(array $data): Product

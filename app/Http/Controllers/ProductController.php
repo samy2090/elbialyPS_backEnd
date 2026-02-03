@@ -19,21 +19,32 @@ class ProductController extends Controller
     }
 
     /**
+     * Get product categories (for expense UI: sub-categories from products table).
+     */
+    public function categories(): JsonResponse
+    {
+        $categories = $this->productService->getProductCategories();
+        return response()->json(['data' => $categories]);
+    }
+
+    /**
      * Display a listing of the products.
      *
      * Query parameters (optional):
      * - search: filter by product name or SKU (partial match)
+     * - category: filter by product category (drink, snack, food, other)
      * - paginate: when true/1, returns paginated results; otherwise returns all (max 500)
      * - per_page: items per page when paginated (default: 10, max: 100)
      */
     public function index(Request $request): JsonResponse
     {
         $search = $request->filled('search') ? trim($request->search) : null;
+        $category = $request->filled('category') ? trim($request->category) : null;
 
         if ($request->boolean('paginate')) {
             $perPage = min((int) $request->get('per_page', 10), 100);
             $perPage = max($perPage, 1);
-            $products = $this->productService->getFilteredProducts($search, true, $perPage);
+            $products = $this->productService->getFilteredProducts($search, $category, true, $perPage);
             return response()->json([
                 'status' => 'success',
                 'data' => $products,
@@ -41,7 +52,7 @@ class ProductController extends Controller
         }
 
         $maxLimit = 500;
-        $products = $this->productService->getFilteredProducts($search, false, $maxLimit);
+        $products = $this->productService->getFilteredProducts($search, $category, false, $maxLimit);
         return response()->json([
             'status' => 'success',
             'data' => $products,

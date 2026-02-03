@@ -278,6 +278,13 @@ class SessionActivityController extends Controller
             return response()->json(['message' => 'Product not found'], Response::HTTP_NOT_FOUND);
         }
 
+        if ($product->stock < $validated['quantity']) {
+            return response()->json([
+                'message' => 'Out of the stock',
+                'available' => $product->stock,
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         // Calculate prices
         $price = (float) $product->price;
         $totalPrice = $price * $validated['quantity'];
@@ -291,6 +298,8 @@ class SessionActivityController extends Controller
             'total_price' => $totalPrice,
             'ordered_by_user_id' => $validated['ordered_by_user_id'],
         ]);
+
+        $product->decrement('stock', $validated['quantity']);
 
         // Load relationships for response
         $activityProduct->load(['product', 'orderedByUser']);
@@ -323,15 +332,33 @@ class SessionActivityController extends Controller
 
         $validated = $request->validated();
 
+        $oldProductId = (int) $activityProduct->product_id;
+        $oldQuantity = (int) $activityProduct->quantity;
+        $newProductId = (int) $validated['product_id'];
+        $newQuantity = (int) $validated['quantity'];
+
         // Get the product to fetch current price (in case product_id changed)
-        $product = Product::find($validated['product_id']);
-        if (!$product) {
+        $newProduct = Product::find($newProductId);
+        if (!$newProduct) {
             return response()->json(['message' => 'Product not found'], Response::HTTP_NOT_FOUND);
         }
 
+        $available = $oldProductId === $newProductId
+            ? $newProduct->stock + $oldQuantity
+            : $newProduct->stock;
+        if ($available < $newQuantity) {
+            return response()->json([
+                'message' => 'Out of the stock',
+                'available' => $newProduct->stock,
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        Product::where('id', $oldProductId)->increment('stock', $oldQuantity);
+        Product::where('id', $newProductId)->decrement('stock', $newQuantity);
+
         // Calculate prices
-        $price = (float) $product->price;
-        $totalPrice = $price * $validated['quantity'];
+        $price = (float) $newProduct->price;
+        $totalPrice = $price * $newQuantity;
 
         // Update activity product
         $activityProduct->update([
@@ -371,6 +398,7 @@ class SessionActivityController extends Controller
             return response()->json(['message' => 'Product order not found in this activity'], Response::HTTP_NOT_FOUND);
         }
 
+        Product::where('id', $activityProduct->product_id)->increment('stock', $activityProduct->quantity);
         $activityProduct->delete();
 
         return response()->json(['message' => 'Product order deleted successfully']);

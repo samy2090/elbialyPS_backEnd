@@ -8,6 +8,10 @@ use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\SessionActivityController;
+use App\Http\Controllers\ExpenseCategoryController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\ExpenseRecurrenceController;
+use App\Http\Controllers\ExpenseReportController;
 
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
@@ -66,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Product management routes with role-based access control
     Route::prefix('products')->middleware(['auth:sanctum', 'admin_or_staff'])->group(function () {
         Route::get('/', [ProductController::class, 'index']); // List products
+        Route::get('/categories', [ProductController::class, 'categories']); // Get product categories (for expense UI)
         Route::get('/{id}', [ProductController::class, 'show']); // Show single product
         Route::post('/', [ProductController::class, 'store']); // Create product
         Route::put('/{id}', [ProductController::class, 'update']); // Update product
@@ -143,5 +148,68 @@ Route::middleware('auth:sanctum')->group(function () {
                 Route::delete('/{productOrderId}', [SessionActivityController::class, 'deleteActivityProduct']); // Delete product order
             });
         });
+    });
+
+    // Expense Categories management routes (Admin & Staff full CRUD)
+    Route::prefix('expense-categories')->middleware('admin_or_staff')->group(function () {
+        Route::get('/', [ExpenseCategoryController::class, 'index']); // List all categories
+        Route::get('/paginated', [ExpenseCategoryController::class, 'indexPaginated']); // List categories (paginated)
+        Route::get('/main', [ExpenseCategoryController::class, 'getMainCategories']); // Get main categories
+        Route::get('/active', [ExpenseCategoryController::class, 'getActiveCategories']); // Get active categories
+        Route::get('/{id}', [ExpenseCategoryController::class, 'show']); // Show single category
+        Route::get('/{id}/sub-categories', [ExpenseCategoryController::class, 'getSubCategories']); // Get sub-categories
+        Route::post('/', [ExpenseCategoryController::class, 'store']); // Create category
+        Route::put('/{id}', [ExpenseCategoryController::class, 'update']); // Update category
+        Route::patch('/{id}', [ExpenseCategoryController::class, 'update']); // Partial update category
+        Route::delete('/{id}', [ExpenseCategoryController::class, 'destroy']); // Delete category
+        Route::patch('/{id}/deactivate', [ExpenseCategoryController::class, 'deactivate']); // Deactivate category
+        Route::patch('/{id}/activate', [ExpenseCategoryController::class, 'activate']); // Activate category
+    });
+
+    // Expenses management routes (Admin & Staff full CRUD)
+    Route::prefix('expenses')->middleware('admin_or_staff')->group(function () {
+        Route::get('/', [ExpenseController::class, 'index']); // List expenses
+        Route::get('/date-range', [ExpenseController::class, 'getByDateRange']); // Get expenses by date range
+        Route::get('/category/{categoryId}', [ExpenseController::class, 'getByCategory']); // Get expenses by category
+        Route::get('/status/{status}', [ExpenseController::class, 'getByStatus']); // Get expenses by status (paid/unpaid)
+        Route::get('/recurring', [ExpenseController::class, 'getRecurring']); // Get recurring expenses
+        Route::get('/{id}', [ExpenseController::class, 'show']); // Show single expense
+        Route::post('/', [ExpenseController::class, 'store']); // Create expense
+        Route::put('/{id}', [ExpenseController::class, 'update']); // Update expense
+        Route::patch('/{id}', [ExpenseController::class, 'update']); // Partial update expense
+        Route::delete('/{id}', [ExpenseController::class, 'destroy']); // Delete expense
+        Route::patch('/{id}/mark-paid', [ExpenseController::class, 'markAsPaid']); // Mark as paid
+        Route::patch('/{id}/mark-unpaid', [ExpenseController::class, 'markAsUnpaid']); // Mark as unpaid
+        
+        // Expense attachments
+        Route::get('/{id}/attachments', [ExpenseController::class, 'getAttachments']); // Get attachments
+        Route::post('/{id}/attachments', [ExpenseController::class, 'uploadAttachment']); // Upload attachment
+        Route::delete('/{id}/attachments/{attachmentId}', [ExpenseController::class, 'deleteAttachment']); // Delete attachment
+    });
+
+    // Expense Recurrences management routes (Admin & Staff full CRUD)
+    Route::prefix('expense-recurrences')->middleware('admin_or_staff')->group(function () {
+        Route::get('/', [ExpenseRecurrenceController::class, 'index']); // List recurrences
+        Route::get('/active', [ExpenseRecurrenceController::class, 'getActive']); // Get active recurrences
+        Route::get('/overdue', [ExpenseRecurrenceController::class, 'getOverdue']); // Get overdue recurrences
+        Route::get('/due-within', [ExpenseRecurrenceController::class, 'getDueWithin']); // Get recurrences due within X days
+        Route::get('/{id}', [ExpenseRecurrenceController::class, 'show']); // Show single recurrence
+        Route::post('/', [ExpenseRecurrenceController::class, 'store']); // Create recurrence
+        Route::put('/{id}', [ExpenseRecurrenceController::class, 'update']); // Update recurrence
+        Route::patch('/{id}', [ExpenseRecurrenceController::class, 'update']); // Partial update recurrence
+        Route::delete('/{id}', [ExpenseRecurrenceController::class, 'destroy']); // Delete recurrence
+        Route::patch('/{id}/deactivate', [ExpenseRecurrenceController::class, 'deactivate']); // Deactivate recurrence
+        Route::patch('/{id}/activate', [ExpenseRecurrenceController::class, 'activate']); // Activate recurrence
+        Route::post('/{id}/confirm-payment', [ExpenseRecurrenceController::class, 'confirmPayment']); // Confirm payment (creates expense)
+    });
+
+    // Expense Reports routes (Admin & Staff read-only)
+    Route::prefix('expense-reports')->middleware('admin_or_staff')->group(function () {
+        Route::get('/summary', [ExpenseReportController::class, 'getSummary']); // Summary report
+        Route::get('/by-category', [ExpenseReportController::class, 'getByCategory']); // By category report
+        Route::get('/paid-vs-unpaid', [ExpenseReportController::class, 'getPaidVsUnpaid']); // Paid vs unpaid report
+        Route::get('/monthly', [ExpenseReportController::class, 'getMonthlySummary']); // Monthly summary
+        Route::get('/upcoming-recurring', [ExpenseReportController::class, 'getUpcomingRecurring']); // Upcoming recurring
+        Route::get('/overdue-recurring', [ExpenseReportController::class, 'getOverdueRecurring']); // Overdue recurring
     });
 });

@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             DeviceSeeder::class,
             ProductSeeder::class,
+            ExpenseCategorySeeder::class,
             GameSessionSeeder::class,
             SessionActivitySeeder::class,
             ActivityUserSeeder::class,
