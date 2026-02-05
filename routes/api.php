@@ -19,6 +19,10 @@ Route::post('login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('user', [AuthController::class, 'user']);
+    Route::get('avatars', [AuthController::class, 'avatarOptions']);
+    Route::put('user', [AuthController::class, 'updateProfile']);
+    Route::patch('user', [AuthController::class, 'updateProfile']);
+    Route::post('user', [AuthController::class, 'updateProfile']); // POST with _method=PATCH for file uploads
     
     // User management routes with role-based access control
     Route::prefix('users')->group(function () {
