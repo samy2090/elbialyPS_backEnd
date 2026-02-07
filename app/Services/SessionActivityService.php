@@ -80,6 +80,26 @@ class SessionActivityService
                 $activity->update(['total_price' => $calculatedPrice]);
             }
         }
+
+        // When adding a new activity to an existing session: add session customer to this activity's activity_user
+        // only if all other activities in the session are ended (user can only be in one active/paused activity)
+        if ($activity && $activity->session_id) {
+            $session = Session::find($activity->session_id);
+            if ($session && $session->customer_id) {
+                $otherActivitiesEnded = SessionActivity::where('session_id', $activity->session_id)
+                    ->where('id', '!=', $activity->id)
+                    ->whereIn('status', [SessionStatus::ACTIVE->value, SessionStatus::PAUSED->value])
+                    ->doesntExist();
+                if ($otherActivitiesEnded) {
+                    ActivityUser::create([
+                        'session_activity_id' => $activity->id,
+                        'user_id' => $session->customer_id,
+                        'duration_hours' => $activity->duration_hours,
+                        'cost_share' => $activity->total_price ?? 0,
+                    ]);
+                }
+            }
+        }
         
         return $activity;
     }
@@ -1141,30 +1161,29 @@ class SessionActivityService
             throw new \Exception('Session not found');
         }
 
-        // Validate: Cannot add session customer
+        // Validate: Cannot add session customer (they are added automatically when allowed)
         if ($session->customer_id == $userId) {
             throw new \Exception('Cannot add session customer to activities');
         }
 
-        // Validate: User must not be in any active activity
-        $userInActiveActivity = ActivityUser::whereHas('sessionActivity', function ($query) {
-            $query->where('status', SessionStatus::ACTIVE->value);
-        })->where('user_id', $userId)->exists();
-
-        if ($userInActiveActivity) {
-            throw new \Exception('User is already assigned to an active activity');
+        // Validate: User already in this activity (avoid duplicate)
+        if (ActivityUser::where('session_activity_id', $activityId)->where('user_id', $userId)->exists()) {
+            throw new \Exception('User is already in this activity');
         }
 
-        // Remove user from any paused activities (they can be moved)
-        $pausedActivities = ActivityUser::whereHas('sessionActivity', function ($query) {
-            $query->where('status', SessionStatus::PAUSED->value);
-        })->where('user_id', $userId)->get();
+        // Validate: User can only be in one active or paused activity at a time.
+        // Allow adding only if the user is not in any other (non-ended) activity.
+        $userInOtherActiveOrPaused = ActivityUser::where('user_id', $userId)
+            ->where('session_activity_id', '!=', $activityId)
+            ->whereHas('sessionActivity', function ($query) {
+                $query->whereIn('status', [SessionStatus::ACTIVE->value, SessionStatus::PAUSED->value]);
+            })->exists();
 
-        foreach ($pausedActivities as $pausedActivityUser) {
-            $pausedActivityUser->delete();
+        if ($userInOtherActiveOrPaused) {
+            throw new \Exception('User can only be in one active or paused activity at a time. Their current activity must be ended first.');
         }
 
-        // Now add user to the selected activity
+        // Add user to the selected activity
         $data['session_activity_id'] = $activityId;
         return ActivityUser::create($data);
     }

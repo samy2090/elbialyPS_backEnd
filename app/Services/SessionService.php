@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ActivityUser;
 use App\Models\Session;
 use App\Models\SessionActivity;
 use App\Repositories\SessionRepositoryInterface;
@@ -187,7 +188,10 @@ class SessionService
         if (!$session) {
             return false;
         }
-        
+
+        $oldCustomerId = $session->customer_id;
+        $newCustomerId = $data['customer_id'] ?? null;
+
         // Check if status is being changed
         if (isset($data['status']) && $data['status'] !== $session->status->value) {
             $newStatus = $data['status'];
@@ -203,8 +207,20 @@ class SessionService
                     ->update(['status' => $newStatus]);
             }
         }
-        
-        return $this->sessionRepository->update($id, $data);
+
+        $updated = $this->sessionRepository->update($id, $data);
+
+        // When customer_id changes, update all related activity_user rows so the new customer is linked to all activities
+        if ($updated && $newCustomerId !== null && (int) $newCustomerId !== (int) $oldCustomerId) {
+            $activityIds = $session->activities()->pluck('id');
+            if ($activityIds->isNotEmpty()) {
+                ActivityUser::whereIn('session_activity_id', $activityIds)
+                    ->where('user_id', $oldCustomerId)
+                    ->update(['user_id' => $newCustomerId]);
+            }
+        }
+
+        return $updated;
     }
 
     public function deleteSession(int $id): bool
