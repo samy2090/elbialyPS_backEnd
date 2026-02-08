@@ -23,6 +23,9 @@ class DatabaseSeeder extends Seeder
             SessionActivitySeeder::class,
             ActivityUserSeeder::class,
             ActivityProductSeeder::class,
+            ScorePointsSettingSeeder::class,
+            UserLevelSeeder::class,
+            SiteSettingSeeder::class,
         ]);
     }
 }

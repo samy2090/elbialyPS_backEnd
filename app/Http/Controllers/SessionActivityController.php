@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateActivityStatusRequest;
 use App\Http\Requests\CreateActivityProductRequest;
 use App\Services\SessionActivityService;
 use App\Models\ActivityProduct;
+use App\Models\ActivityUser;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
@@ -272,6 +273,13 @@ class SessionActivityController extends Controller
 
         $validated = $request->validated();
 
+        // Validate that the buyer is in the activity
+        if (!ActivityUser::where('session_activity_id', $activityId)->where('user_id', $validated['ordered_by_user_id'])->exists()) {
+            return response()->json([
+                'message' => 'The user must be in the activity to order a product',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         // Get the product to fetch current price
         $product = Product::find($validated['product_id']);
         if (!$product) {
@@ -331,6 +339,13 @@ class SessionActivityController extends Controller
         }
 
         $validated = $request->validated();
+
+        // Validate that the buyer is in the activity
+        if (!ActivityUser::where('session_activity_id', $activityId)->where('user_id', $validated['ordered_by_user_id'])->exists()) {
+            return response()->json([
+                'message' => 'The user must be in the activity to order a product',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         $oldProductId = (int) $activityProduct->product_id;
         $oldQuantity = (int) $activityProduct->quantity;

@@ -52,9 +52,12 @@ class AuthController extends Controller
             'url' => Storage::disk('public')->url($path),
         ], User::PRESET_AVATARS);
 
-        return response()->json(array_merge($user->toArray(), [
+        $data = array_merge($user->toArray(), [
             'avatar_options' => array_values($avatarOptions),
-        ]));
+            'total_points' => $user->total_points,
+        ]);
+
+        return response()->json($data);
     }
 
     /**

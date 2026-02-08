@@ -13,3 +13,8 @@ Schedule::command('activities:auto-end')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Schedule points expiry check daily (e.g. at midnight)
+Schedule::command('points:process-expiry')
+    ->daily()
+    ->withoutOverlapping();

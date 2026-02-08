@@ -131,6 +131,31 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the user's point balance
+     */
+    public function pointBalance()
+    {
+        return $this->hasOne(UserPointBalance::class);
+    }
+
+    /**
+     * Get the user's point transactions
+     */
+    public function pointTransactions()
+    {
+        return $this->hasMany(ScorePointsTransaction::class);
+    }
+
+    /**
+     * Get total points (from balance or 0)
+     */
+    public function getTotalPointsAttribute(): float
+    {
+        $balance = $this->pointBalance;
+        return $balance ? (float) $balance->total_points : 0.0;
+    }
+
+    /**
      * Check if user has given role
      */
     public function hasRole(string $roleName): bool

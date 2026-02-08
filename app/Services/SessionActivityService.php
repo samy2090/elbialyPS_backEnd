@@ -14,6 +14,7 @@ use App\Enums\DeviceStatus;
 use App\Enums\ActivityMode;
 use App\Repositories\SessionActivityRepositoryInterface;
 use Illuminate\Pagination\LengthAwarePaginator;
+use App\Services\UserPointsService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as SupportCollection;
 
@@ -332,7 +333,11 @@ class SessionActivityService
         // This is critical when ending early - we want to calculate based on actual time used
         if ($activity->started_at) {
             $this->recalculateActivityPrice($activity->id, $activityEndTime);
-            
+
+            // Refresh to get updated duration_hours, then grant play-time points
+            $activity->refresh();
+            app(UserPointsService::class)->grantPlayTimePoints($activity);
+
             // Explicitly recalculate session total to ensure it's updated
             // (Model events should handle this, but ensure it happens)
             if ($activity->session_id) {
@@ -342,7 +347,7 @@ class SessionActivityService
                 }
             }
         }
-        
+
         // Free up the device if activity uses a device
         if ($activity->isDeviceUse() && $activity->device_id) {
             $device = Device::find($activity->device_id);

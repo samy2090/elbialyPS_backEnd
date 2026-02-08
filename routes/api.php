@@ -12,6 +12,10 @@ use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ExpenseRecurrenceController;
 use App\Http\Controllers\ExpenseReportController;
+use App\Http\Controllers\UserPointsController;
+use App\Http\Controllers\ScorePointsSettingController;
+use App\Http\Controllers\UserLevelController;
+use App\Http\Controllers\SiteSettingController;
 
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
@@ -19,6 +23,13 @@ Route::post('login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('user', [AuthController::class, 'user']);
+
+    // User points (loyalty) - accessible by authenticated users
+    Route::prefix('points')->group(function () {
+        Route::get('balance', [UserPointsController::class, 'balance']);
+        Route::get('transactions', [UserPointsController::class, 'transactions']);
+        Route::get('levels', [UserPointsController::class, 'levels']);
+    });
     Route::get('avatars', [AuthController::class, 'avatarOptions']);
     Route::put('user', [AuthController::class, 'updateProfile']);
     Route::patch('user', [AuthController::class, 'updateProfile']);
@@ -205,6 +216,30 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/{id}/deactivate', [ExpenseRecurrenceController::class, 'deactivate']); // Deactivate recurrence
         Route::patch('/{id}/activate', [ExpenseRecurrenceController::class, 'activate']); // Activate recurrence
         Route::post('/{id}/confirm-payment', [ExpenseRecurrenceController::class, 'confirmPayment']); // Confirm payment (creates expense)
+    });
+
+    // Site settings (Admin only)
+    Route::prefix('site-settings')->middleware('admin')->group(function () {
+        Route::get('/', [SiteSettingController::class, 'index']);
+        Route::put('/', [SiteSettingController::class, 'update']);
+        Route::patch('/', [SiteSettingController::class, 'update']);
+    });
+
+    // Score points settings (Admin only)
+    Route::prefix('score-points-settings')->middleware('admin')->group(function () {
+        Route::get('/', [ScorePointsSettingController::class, 'show']);
+        Route::put('/', [ScorePointsSettingController::class, 'update']);
+        Route::patch('/', [ScorePointsSettingController::class, 'update']);
+    });
+
+    // User levels (Admin only) - for loyalty/rank tiers
+    Route::prefix('user-levels')->middleware('admin')->group(function () {
+        Route::get('/', [UserLevelController::class, 'index']);
+        Route::get('/{userLevel}', [UserLevelController::class, 'show']);
+        Route::post('/', [UserLevelController::class, 'store']);
+        Route::put('/{userLevel}', [UserLevelController::class, 'update']);
+        Route::patch('/{userLevel}', [UserLevelController::class, 'update']);
+        Route::delete('/{userLevel}', [UserLevelController::class, 'destroy']);
     });
 
     // Expense Reports routes (Admin & Staff read-only)

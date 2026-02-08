@@ -19,9 +19,11 @@ use App\Repositories\ExpenseRepositoryInterface;
 use App\Repositories\ExpenseRepository;
 use App\Repositories\ExpenseRecurrenceRepositoryInterface;
 use App\Repositories\ExpenseRecurrenceRepository;
+use App\Models\ActivityProduct;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseAttachment;
+use App\Observers\ActivityProductPointsObserver;
 use App\Observers\ExpenseObserver;
 use App\Observers\ExpenseCategoryObserver;
 use App\Observers\ExpenseAttachmentObserver;
@@ -54,6 +56,9 @@ class AppServiceProvider extends ServiceProvider
         Expense::observe(ExpenseObserver::class);
         ExpenseCategory::observe(ExpenseCategoryObserver::class);
         ExpenseAttachment::observe(ExpenseAttachmentObserver::class);
+
+        // Register points observer for activity products
+        ActivityProduct::observe(ActivityProductPointsObserver::class);
     }
 }
 
