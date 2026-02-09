@@ -16,9 +16,22 @@ use App\Http\Controllers\UserPointsController;
 use App\Http\Controllers\ScorePointsSettingController;
 use App\Http\Controllers\UserLevelController;
 use App\Http\Controllers\SiteSettingController;
+use App\Http\Controllers\UserPointBalanceController;
+use App\Http\Controllers\ScorePointsTransactionController;
+use App\Http\Controllers\UserRankController;
+use App\Http\Controllers\SpinWheelController;
+use App\Http\Controllers\SpinWheelSettingController;
+use App\Http\Controllers\SpinWheelOptionController;
+use App\Http\Controllers\SpinWheelClaimController;
 
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
+
+// Rank & leaderboard - public (optional auth for admin/staff full user details)
+Route::middleware('optional_sanctum')->group(function () {
+    Route::get('points/leaderboard', [UserRankController::class, 'leaderboard']);
+    Route::get('points/rank/{userId}', [UserRankController::class, 'userRank']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
@@ -29,6 +42,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('balance', [UserPointsController::class, 'balance']);
         Route::get('transactions', [UserPointsController::class, 'transactions']);
         Route::get('levels', [UserPointsController::class, 'levels']);
+        Route::get('my-rank', [UserRankController::class, 'myRank']);
+    });
+
+    // Spin wheel (authenticated users)
+    Route::prefix('spin-wheel')->group(function () {
+        Route::get('status', [SpinWheelController::class, 'status']);
+        Route::post('spin', [SpinWheelController::class, 'spin']);
+        Route::post('choose', [SpinWheelController::class, 'choose']);
+        Route::get('history', [SpinWheelController::class, 'history']);
+        Route::get('my-claims', [SpinWheelController::class, 'claims']);
     });
     Route::get('avatars', [AuthController::class, 'avatarOptions']);
     Route::put('user', [AuthController::class, 'updateProfile']);
@@ -225,6 +248,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/', [SiteSettingController::class, 'update']);
     });
 
+    // Spin wheel admin (Admin only)
+    Route::prefix('spin-wheel')->middleware('admin')->group(function () {
+        Route::get('settings', [SpinWheelSettingController::class, 'show']);
+        Route::put('settings', [SpinWheelSettingController::class, 'update']);
+        Route::patch('settings', [SpinWheelSettingController::class, 'update']);
+        Route::apiResource('options', SpinWheelOptionController::class);
+        Route::get('claims', [SpinWheelClaimController::class, 'index']);
+        Route::get('claims/{spinWheelClaim}', [SpinWheelClaimController::class, 'show']);
+        Route::patch('claims/{spinWheelClaim}/fulfill', [SpinWheelClaimController::class, 'fulfill']);
+    });
+
     // Score points settings (Admin only)
     Route::prefix('score-points-settings')->middleware('admin')->group(function () {
         Route::get('/', [ScorePointsSettingController::class, 'show']);
@@ -232,14 +266,27 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/', [ScorePointsSettingController::class, 'update']);
     });
 
-    // User levels (Admin only) - for loyalty/rank tiers
-    Route::prefix('user-levels')->middleware('admin')->group(function () {
+    // User point balances (Admin only)
+    Route::prefix('user-point-balances')->middleware('admin')->group(function () {
+        Route::get('/', [UserPointBalanceController::class, 'index']);
+        Route::post('/{userId}/adjust', [UserPointBalanceController::class, 'adjust']);
+    });
+
+    // Score points transactions (Admin only) - all transactions, filter by user
+    Route::prefix('score-points-transactions')->middleware('admin')->group(function () {
+        Route::get('/', [ScorePointsTransactionController::class, 'index']);
+    });
+
+    // User levels - read visible to any role; create/update/delete admin only
+    Route::prefix('user-levels')->group(function () {
         Route::get('/', [UserLevelController::class, 'index']);
         Route::get('/{userLevel}', [UserLevelController::class, 'show']);
-        Route::post('/', [UserLevelController::class, 'store']);
-        Route::put('/{userLevel}', [UserLevelController::class, 'update']);
-        Route::patch('/{userLevel}', [UserLevelController::class, 'update']);
-        Route::delete('/{userLevel}', [UserLevelController::class, 'destroy']);
+        Route::middleware('admin')->group(function () {
+            Route::post('/', [UserLevelController::class, 'store']);
+            Route::put('/{userLevel}', [UserLevelController::class, 'update']);
+            Route::patch('/{userLevel}', [UserLevelController::class, 'update']);
+            Route::delete('/{userLevel}', [UserLevelController::class, 'destroy']);
+        });
     });
 
     // Expense Reports routes (Admin & Staff read-only)

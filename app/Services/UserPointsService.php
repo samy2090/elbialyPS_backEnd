@@ -165,6 +165,41 @@ class UserPointsService
         }
     }
 
+    /**
+     * Admin adjustment: add or subtract points for a user
+     */
+    public function adjustPoints(int $userId, float $points, ?string $description = null): ScorePointsTransaction
+    {
+        return $this->createTransaction(
+            userId: $userId,
+            points: $points,
+            type: PointTransactionType::ADJUSTMENT,
+            source: null,
+            description: $description ?? 'Admin adjustment',
+            metadata: ['adjusted_by' => auth()->id()]
+        );
+    }
+
+    /**
+     * Grant spin wheel points to a user.
+     */
+    public function grantSpinWheelPoints(
+        int $userId,
+        float $points,
+        object $source,
+        ?string $description = null,
+        ?array $metadata = null
+    ): ScorePointsTransaction {
+        return $this->createTransaction(
+            userId: $userId,
+            points: $points,
+            type: PointTransactionType::SPIN_WHEEL,
+            source: $source,
+            description: $description ?? 'Spin wheel reward',
+            metadata: $metadata
+        );
+    }
+
     protected function createTransaction(
         int $userId,
         float $points,

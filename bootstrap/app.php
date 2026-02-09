@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminOnly::class,
             'admin_or_staff' => \App\Http\Middleware\AdminOrStaff::class,
+            'optional_sanctum' => \App\Http\Middleware\OptionalSanctum::class,
         ]);
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,

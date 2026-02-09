@@ -10,6 +10,7 @@ enum PointTransactionType: string
     case REDEMPTION = 'redemption';
     case ADJUSTMENT = 'adjustment';
     case EXPIRY = 'expiry';
+    case SPIN_WHEEL = 'spin_wheel';
 
     public function label(): string
     {
@@ -20,6 +21,7 @@ enum PointTransactionType: string
             self::REDEMPTION => 'Redemption',
             self::ADJUSTMENT => 'Adjustment',
             self::EXPIRY => 'Expiry',
+            self::SPIN_WHEEL => 'Spin Wheel',
         };
     }
 
