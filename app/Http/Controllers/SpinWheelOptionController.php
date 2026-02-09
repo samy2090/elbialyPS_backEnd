@@ -69,7 +69,7 @@ class SpinWheelOptionController extends Controller
             'value' => 'nullable|numeric|min:0',
             'product_id' => 'nullable|exists:products,id',
             'weight' => 'required|integer|min:1',
-            'max_claims_per_period' => 'nullable|integer|min:1',
+            'max_claims_per_period' => 'sometimes|nullable|integer|min:0',
             'is_active' => 'sometimes|boolean',
             'display_order' => 'nullable|integer|min:0',
         ]);
@@ -116,7 +116,7 @@ class SpinWheelOptionController extends Controller
             'value' => 'nullable|numeric|min:0',
             'product_id' => 'nullable|exists:products,id',
             'weight' => 'sometimes|integer|min:1',
-            'max_claims_per_period' => 'nullable|integer|min:1',
+            'max_claims_per_period' => 'sometimes|nullable|integer|min:0',
             'is_active' => 'sometimes|boolean',
             'display_order' => 'nullable|integer|min:0',
         ]);
