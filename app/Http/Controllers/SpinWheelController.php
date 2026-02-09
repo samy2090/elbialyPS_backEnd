@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SpinWheelUserBatch;
 use App\Services\SpinWheelService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -123,6 +124,48 @@ class SpinWheelController extends Controller
                 'spun_at' => $h->spun_at->toIso8601String(),
             ]),
         ]);
+    }
+
+    /**
+     * Get all users' spin history (admin only).
+     */
+    public function adminHistory(Request $request): JsonResponse
+    {
+        $limit = min((int) $request->get('limit', 50), 200);
+        $history = $this->spinWheelService->getHistoryForAdmin($limit);
+
+        return response()->json([
+            'data' => $history->map(fn ($h) => [
+                'id' => $h->id,
+                'user' => $h->user ? [
+                    'id' => $h->user->id,
+                    'name' => $h->user->name,
+                    'username' => $h->user->username,
+                ] : null,
+                'option' => [
+                    'id' => $h->option->id,
+                    'label' => $h->option->label,
+                    'reward' => $h->reward_value ?? $h->option->getRewardValueForDisplay(),
+                ],
+                'spin_number' => $h->spin_number,
+                'spun_at' => $h->spun_at->toIso8601String(),
+                'claimed' => $this->wasSpinClaimed($h),
+                'claim_status' => $this->wasSpinClaimed($h) ? 'claimed' : 'skipped',
+            ]),
+        ]);
+    }
+
+    /**
+     * Whether this spin was claimed by the user (vs skipped).
+     */
+    private function wasSpinClaimed($spinHistory): bool
+    {
+        $batch = $spinHistory->batch;
+        if (!$batch || $batch->status !== SpinWheelUserBatch::STATUS_CLAIMED) {
+            return false;
+        }
+        return (int) $batch->claimed_option_id === (int) $spinHistory->option_id
+            && $spinHistory->spin_number === $batch->spins_used;
     }
 
     /**

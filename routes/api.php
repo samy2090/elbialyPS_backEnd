@@ -254,6 +254,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('settings', [SpinWheelSettingController::class, 'update']);
         Route::patch('settings', [SpinWheelSettingController::class, 'update']);
         Route::apiResource('options', SpinWheelOptionController::class);
+        Route::get('admin/history', [SpinWheelController::class, 'adminHistory']);
         Route::get('claims', [SpinWheelClaimController::class, 'index']);
         Route::get('claims/{spinWheelClaim}', [SpinWheelClaimController::class, 'show']);
         Route::patch('claims/{spinWheelClaim}/fulfill', [SpinWheelClaimController::class, 'fulfill']);

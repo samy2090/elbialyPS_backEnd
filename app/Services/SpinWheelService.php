@@ -107,6 +107,10 @@ class SpinWheelService
         return [$periodStart, $periodEnd];
     }
 
+    /**
+     * Cooldown: next period is allowed only after last claim + cooldown_days.
+     * No fallback "today + days" when user never claimed — batch reuse is handled in getOrCreateUserBatch.
+     */
     protected function periodCooldown(int $userId, Carbon $now, int $days): ?array
     {
         $lastClaimed = SpinWheelUserBatch::where('user_id', $userId)
@@ -115,22 +119,19 @@ class SpinWheelService
             ->first();
 
         if (!$lastClaimed || !$lastClaimed->claimed_at) {
-            $periodStart = $now->copy()->startOfDay();
-            $periodEnd = $periodStart->copy()->addDays($days)->subSecond();
-            return [$periodStart, $periodEnd];
+            return null;
         }
 
         $claimedAt = Carbon::parse($lastClaimed->claimed_at, config('app.timezone'));
-        $periodStart = $claimedAt->copy();
-        $periodEnd = $claimedAt->copy()->addDays($days)->subSecond();
+        $cooldownEnd = $claimedAt->copy()->addDays($days)->subSecond();
 
-        if ($now->isAfter($periodEnd)) {
-            $periodStart = $periodEnd->copy()->addSecond();
+        if ($now->isAfter($cooldownEnd)) {
+            $periodStart = $cooldownEnd->copy()->addSecond();
             $periodEnd = $periodStart->copy()->addDays($days)->subSecond();
             return [$periodStart, $periodEnd];
         }
 
-        return [$periodStart, $periodEnd];
+        return null;
     }
 
     /**
@@ -154,6 +155,7 @@ class SpinWheelService
 
     /**
      * Get or create user's current batch for the period.
+     * For cooldown: reuse any unclaimed batch (no new batch until user claims); time does not close the batch.
      */
     public function getOrCreateUserBatch(int $userId): ?SpinWheelUserBatch
     {
@@ -166,7 +168,33 @@ class SpinWheelService
             return null;
         }
 
+        $type = SpinWheelPeriodType::tryFrom($config->period_type);
+
+        if ($type === SpinWheelPeriodType::COOLDOWN_DAYS) {
+            $existingUnclaimed = SpinWheelUserBatch::where('user_id', $userId)
+                ->where('status', '!=', SpinWheelUserBatch::STATUS_CLAIMED)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($existingUnclaimed) {
+                return $existingUnclaimed;
+            }
+        }
+
         $bounds = $this->getCurrentPeriodBounds($userId);
+
+        if (!$bounds && $type === SpinWheelPeriodType::COOLDOWN_DAYS) {
+            $hasAnyBatch = SpinWheelUserBatch::where('user_id', $userId)->exists();
+            if (!$hasAnyBatch) {
+                $value = (int) ($config->period_value ?? 1);
+                $tz = config('app.timezone');
+                $now = Carbon::now($tz);
+                $periodStart = $now->copy()->startOfDay();
+                $periodEnd = $periodStart->copy()->addDays($value)->subSecond();
+                $bounds = [$periodStart, $periodEnd];
+            }
+        }
+
         if (!$bounds) {
             return null;
         }
@@ -179,7 +207,9 @@ class SpinWheelService
             ->first();
 
         if ($batch) {
-            if ($batch->isExpired() && $batch->status === SpinWheelUserBatch::STATUS_ACTIVE) {
+            if ($type !== SpinWheelPeriodType::COOLDOWN_DAYS
+                && $batch->isExpired()
+                && $batch->status === SpinWheelUserBatch::STATUS_ACTIVE) {
                 $batch->update(['status' => SpinWheelUserBatch::STATUS_EXPIRED]);
             }
             return $batch;
@@ -447,6 +477,18 @@ class SpinWheelService
     {
         return SpinWheelSpinHistory::where('user_id', $userId)
             ->with(['option', 'batch'])
+            ->orderByDesc('spun_at')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Get all users' spin history (for admin).
+     */
+    public function getHistoryForAdmin(int $limit = 50): \Illuminate\Database\Eloquent\Collection
+    {
+        return SpinWheelSpinHistory::query()
+            ->with(['option', 'batch', 'user:id,name,username'])
             ->orderByDesc('spun_at')
             ->limit($limit)
             ->get();
