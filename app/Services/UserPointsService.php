@@ -8,6 +8,7 @@ use App\Models\ActivityUser;
 use App\Models\ScorePointsSetting;
 use App\Models\ScorePointsTransaction;
 use App\Models\SessionActivity;
+use App\Models\User;
 use App\Models\UserPointBalance;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -44,6 +45,9 @@ class UserPointsService
 
             DB::transaction(function () use ($activity, $activityUsers, $pointsToGrant) {
                 foreach ($activityUsers as $activityUser) {
+                    if (!$this->userCanGainPoints($activityUser->user_id)) {
+                        continue;
+                    }
                     $this->createTransaction(
                         userId: $activityUser->user_id,
                         points: $pointsToGrant,
@@ -75,6 +79,9 @@ class UserPointsService
 
             $userId = $activityProduct->ordered_by_user_id;
             if (!$userId) {
+                return;
+            }
+            if (!$this->userCanGainPoints($userId)) {
                 return;
             }
 
@@ -166,9 +173,10 @@ class UserPointsService
     }
 
     /**
-     * Admin adjustment: add or subtract points for a user
+     * Admin adjustment: add or subtract points for a user.
+     * Returns null if user is guest and points are positive (guests cannot gain points).
      */
-    public function adjustPoints(int $userId, float $points, ?string $description = null): ScorePointsTransaction
+    public function adjustPoints(int $userId, float $points, ?string $description = null): ?ScorePointsTransaction
     {
         return $this->createTransaction(
             userId: $userId,
@@ -182,6 +190,7 @@ class UserPointsService
 
     /**
      * Grant spin wheel points to a user.
+     * Returns null if user is guest (guests do not gain points).
      */
     public function grantSpinWheelPoints(
         int $userId,
@@ -189,7 +198,7 @@ class UserPointsService
         object $source,
         ?string $description = null,
         ?array $metadata = null
-    ): ScorePointsTransaction {
+    ): ?ScorePointsTransaction {
         return $this->createTransaction(
             userId: $userId,
             points: $points,
@@ -200,6 +209,16 @@ class UserPointsService
         );
     }
 
+    /**
+     * Whether the user is allowed to gain points (non-guest only).
+     */
+    protected function userCanGainPoints(int $userId): bool
+    {
+        $user = User::with('role')->find($userId);
+
+        return $user && $user->role && $user->role->name !== 'guest';
+    }
+
     protected function createTransaction(
         int $userId,
         float $points,
@@ -207,7 +226,10 @@ class UserPointsService
         ?object $source,
         ?string $description = null,
         ?array $metadata = null,
-    ): ScorePointsTransaction {
+    ): ?ScorePointsTransaction {
+        if ($points > 0 && !$this->userCanGainPoints($userId)) {
+            return null;
+        }
         $transaction = ScorePointsTransaction::create([
             'user_id' => $userId,
             'points' => $points,

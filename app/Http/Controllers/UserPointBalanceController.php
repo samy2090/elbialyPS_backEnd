@@ -96,6 +96,11 @@ class UserPointBalanceController extends Controller
         }
 
         $transaction = $this->userPointsService->adjustPoints($userId, $points, $description);
+        if ($transaction === null) {
+            return response()->json([
+                'message' => 'Guest users cannot receive points.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
         $balance = UserPointBalance::getOrCreateForUser($userId);
 
         return response()->json([
