@@ -20,13 +20,17 @@ use App\Repositories\ExpenseRepository;
 use App\Repositories\ExpenseRecurrenceRepositoryInterface;
 use App\Repositories\ExpenseRecurrenceRepository;
 use App\Models\ActivityProduct;
+use App\Models\Comment;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseAttachment;
+use App\Models\PostReaction;
 use App\Observers\ActivityProductPointsObserver;
+use App\Observers\CommentObserver;
 use App\Observers\ExpenseObserver;
 use App\Observers\ExpenseCategoryObserver;
 use App\Observers\ExpenseAttachmentObserver;
+use App\Observers\PostReactionObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -59,6 +63,10 @@ class AppServiceProvider extends ServiceProvider
 
         // Register points observer for activity products
         ActivityProduct::observe(ActivityProductPointsObserver::class);
+
+        // Posts: keep denormalized counts in sync
+        PostReaction::observe(PostReactionObserver::class);
+        Comment::observe(CommentObserver::class);
     }
 }
 

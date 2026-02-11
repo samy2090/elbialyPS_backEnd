@@ -17,6 +17,7 @@ class SiteSettingSeeder extends Seeder
             ['key' => 'discount_percent', 'value' => null, 'type' => 'decimal', 'group' => 'discount'],
             ['key' => 'discount_start_at', 'value' => null, 'type' => 'string', 'group' => 'discount'],
             ['key' => 'discount_end_at', 'value' => null, 'type' => 'string', 'group' => 'discount'],
+            ['key' => 'posts_require_approval', 'value' => '0', 'type' => 'boolean', 'group' => 'posts'],
         ];
 
         foreach ($defaults as $row) {

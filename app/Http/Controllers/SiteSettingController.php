@@ -21,6 +21,7 @@ class SiteSettingController extends Controller
         'discount_percent' => ['type' => 'decimal', 'group' => 'discount'],
         'discount_start_at' => ['type' => 'string', 'group' => 'discount'], // Y-m-d
         'discount_end_at' => ['type' => 'string', 'group' => 'discount'],   // Y-m-d
+        'posts_require_approval' => ['type' => 'boolean', 'group' => 'posts'],
     ];
 
     /**
@@ -60,6 +61,7 @@ class SiteSettingController extends Controller
             'discount_percent' => 'sometimes|nullable|numeric|min:0|max:100',
             'discount_start_at' => 'sometimes|nullable|date',
             'discount_end_at' => 'sometimes|nullable|date|after_or_equal:discount_start_at',
+            'posts_require_approval' => 'sometimes|boolean',
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -125,6 +127,7 @@ class SiteSettingController extends Controller
             'discount_percent' => null,
             'discount_start_at' => null,
             'discount_end_at' => null,
+            'posts_require_approval' => false,
             default => null,
         };
     }

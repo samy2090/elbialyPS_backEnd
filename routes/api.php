@@ -23,6 +23,8 @@ use App\Http\Controllers\SpinWheelController;
 use App\Http\Controllers\SpinWheelSettingController;
 use App\Http\Controllers\SpinWheelOptionController;
 use App\Http\Controllers\SpinWheelClaimController;
+use App\Http\Controllers\PostController;
+use App\Http\Controllers\CommentController;
 
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
@@ -31,6 +33,13 @@ Route::post('login', [AuthController::class, 'login']);
 Route::middleware('optional_sanctum')->group(function () {
     Route::get('points/leaderboard', [UserRankController::class, 'leaderboard']);
     Route::get('points/rank/{userId}', [UserRankController::class, 'userRank']);
+});
+
+// Posts - public feed and single post (optional auth for current_user_reaction, can_edit, can_delete)
+Route::middleware('optional_sanctum')->prefix('posts')->group(function () {
+    Route::get('/', [PostController::class, 'index']);
+    Route::get('/{post}', [PostController::class, 'show']);
+    Route::get('/{post}/comments', [CommentController::class, 'index']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -288,6 +297,29 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/{userLevel}', [UserLevelController::class, 'update']);
             Route::delete('/{userLevel}', [UserLevelController::class, 'destroy']);
         });
+    });
+
+    // Admin: list all posts (filters: status, user_id, date_from, date_to)
+    Route::get('/admin/posts', [PostController::class, 'adminList'])->middleware('admin');
+
+    // Admin: list all comments (filters: user_id, post_id, date_from, date_to)
+    Route::get('/admin/comments', [CommentController::class, 'adminIndex'])->middleware('admin');
+
+    // Posts - create, update, delete, react, comments (auth)
+    Route::prefix('posts')->group(function () {
+        Route::get('/my', [PostController::class, 'myPosts']);
+        Route::get('/pending', [PostController::class, 'pending'])->middleware('admin');
+        Route::post('/', [PostController::class, 'store']);
+        Route::put('/{post}', [PostController::class, 'update']);
+        Route::patch('/{post}', [PostController::class, 'update']);
+        Route::delete('/{post}', [PostController::class, 'destroy']);
+        Route::post('/{post}/approve', [PostController::class, 'approve'])->middleware('admin');
+        Route::post('/{post}/react', [PostController::class, 'react']);
+        Route::delete('/{post}/react', [PostController::class, 'removeReaction']);
+        Route::post('/{post}/comments', [CommentController::class, 'store']);
+        Route::put('/{post}/comments/{comment}', [CommentController::class, 'update']);
+        Route::patch('/{post}/comments/{comment}', [CommentController::class, 'update']);
+        Route::delete('/{post}/comments/{comment}', [CommentController::class, 'destroy']);
     });
 
     // Expense Reports routes (Admin & Staff read-only)

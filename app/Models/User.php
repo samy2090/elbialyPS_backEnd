@@ -147,6 +147,38 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the user's posts
+     */
+    public function posts()
+    {
+        return $this->hasMany(Post::class);
+    }
+
+    /**
+     * Get posts where this user is tagged
+     */
+    public function taggedInPosts()
+    {
+        return $this->belongsToMany(Post::class, 'post_user');
+    }
+
+    /**
+     * Get the user's post reactions
+     */
+    public function postReactions()
+    {
+        return $this->hasMany(PostReaction::class);
+    }
+
+    /**
+     * Get the user's comments
+     */
+    public function comments()
+    {
+        return $this->hasMany(Comment::class);
+    }
+
+    /**
      * Get total points (from balance or 0)
      */
     public function getTotalPointsAttribute(): float
