@@ -301,7 +301,10 @@ class PostController extends Controller
     public function removeReaction(Request $request, Post $post): JsonResponse
     {
         $user = $request->user();
-        PostReaction::where('post_id', $post->id)->where('user_id', $user->id)->delete();
+        $reaction = PostReaction::where('post_id', $post->id)->where('user_id', $user->id)->first();
+        if ($reaction) {
+            $reaction->delete(); // Delete via model so PostReactionObserver runs and updates post.reactions_count / reaction_counts
+        }
         $post->refresh();
         $post->load(['user', 'taggedUsers', 'media']);
         return response()->json(['data' => new PostResource($post)]);
