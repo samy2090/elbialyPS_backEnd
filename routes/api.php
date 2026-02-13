@@ -69,9 +69,11 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // User management routes with role-based access control
     Route::prefix('users')->group(function () {
+        // List users - accessible by Admin, Staff, and Customer
+        Route::get('/', [UserController::class, 'index'])->middleware('admin_or_staff_or_customer'); // List users
+
         // Routes accessible by both Admin and Staff (read-only for staff)
         Route::middleware('admin_or_staff')->group(function () {
-            Route::get('/', [UserController::class, 'index']); // List users
             Route::get('/{user}', [UserController::class, 'show']); // Show single user
             Route::get('/options/dropdown', [UserController::class, 'options']); // Get roles and statuses for dropdowns
             Route::post('/guest', [UserController::class, 'createGuest']); // Create guest user (for session creation)

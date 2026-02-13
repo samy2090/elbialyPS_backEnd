@@ -41,6 +41,7 @@ class User extends Authenticatable
         'phone',
         'role_id',
         'status',
+        'is_verified',
         'avatar',
         'last_login_at',
         'created_by',
@@ -69,6 +70,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'password' => 'hashed',
             'status' => UserStatus::class,
+            'is_verified' => 'boolean',
         ];
     }
 
@@ -275,6 +277,14 @@ class User extends Authenticatable
     public function isActive(): bool
     {
         return $this->status === UserStatus::ACTIVE;
+    }
+
+    /**
+     * Check if user is verified (manual admin flag)
+     */
+    public function isVerified(): bool
+    {
+        return (bool) $this->is_verified;
     }
 
     /**

@@ -30,6 +30,7 @@ class UserSeeder extends Seeder
             'role_id' => $adminRole->id,
             'status' => UserStatus::ACTIVE->value,
             'email_verified_at' => now(),
+            'is_verified' => true,
         ]);
 
         // Staff users
@@ -41,6 +42,7 @@ class UserSeeder extends Seeder
             'password' => Hash::make('password123'),
             'role_id' => $staffRole->id,
             'status' => UserStatus::ACTIVE->value,
+            'is_verified' => true,
         ]);
 
         User::create([
@@ -51,6 +53,7 @@ class UserSeeder extends Seeder
             'password' => Hash::make('password123'),
             'role_id' => $staffRole->id,
             'status' => UserStatus::ACTIVE->value,
+            'is_verified' => true,
         ]);
 
         // Customer users
