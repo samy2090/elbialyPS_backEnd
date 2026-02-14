@@ -145,6 +145,19 @@ class CommentController extends Controller
     }
 
     /**
+     * Admin: delete comment by ID (no post required). Soft delete.
+     */
+    public function adminDestroy(Request $request, Comment $comment): JsonResponse
+    {
+        if (!$request->user() || !$request->user()->isAdmin()) {
+            return response()->json(['message' => 'Admin only.'], Response::HTTP_FORBIDDEN);
+        }
+        $this->authorize('delete', $comment);
+        $comment->delete();
+        return response()->json(['message' => 'Comment deleted.']);
+    }
+
+    /**
      * Delete comment (owner or admin). Soft delete.
      */
     public function destroy(Request $request, Post $post, Comment $comment): JsonResponse

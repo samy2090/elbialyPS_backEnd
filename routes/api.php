@@ -306,6 +306,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Admin: list all comments (filters: user_id, post_id, date_from, date_to)
     Route::get('/admin/comments', [CommentController::class, 'adminIndex'])->middleware('admin');
+    Route::delete('/admin/comments/{comment}', [CommentController::class, 'adminDestroy'])->middleware('admin');
 
     // Posts - create, update, delete, react, comments (auth)
     Route::prefix('posts')->group(function () {
