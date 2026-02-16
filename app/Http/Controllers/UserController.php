@@ -8,7 +8,6 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Http\Requests\CreateGuestUserRequest;
 use App\Models\User;
 use App\Models\Role;
-use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use App\Services\AuthService;
 use Illuminate\Http\Request;
@@ -20,6 +19,7 @@ use Illuminate\Support\Str;
 class UserController extends Controller
 {
     use HandlesUserAvatar;
+
     public function __construct(protected AuthService $authService)
     {
     }
@@ -127,6 +127,8 @@ class UserController extends Controller
      */
     public function show(User $user): JsonResponse
     {
+        $user->load('role');
+
         return response()->json([
             'status' => 'success',
             'data' => $user
@@ -183,7 +185,7 @@ class UserController extends Controller
     /**
      * Restore a soft deleted user.
      */
-    public function restore($id): JsonResponse
+    public function restore(int $id): JsonResponse
     {
         $user = User::withTrashed()->findOrFail($id);
         $user->restore();
@@ -198,7 +200,7 @@ class UserController extends Controller
     /**
      * Force delete a user permanently.
      */
-    public function forceDelete($id): JsonResponse
+    public function forceDelete(int $id): JsonResponse
     {
         $user = User::withTrashed()->findOrFail($id);
         
@@ -291,7 +293,7 @@ class UserController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => [
-                'roles' => \App\Models\Role::pluck('name', 'id')->toArray(),
+                'roles' => Role::pluck('name', 'id')->toArray(),
                 'statuses' => UserStatus::options(),
                 'avatar_options' => $avatarOptions,
             ]
