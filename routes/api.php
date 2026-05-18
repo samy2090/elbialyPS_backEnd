@@ -12,6 +12,7 @@ use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ExpenseRecurrenceController;
 use App\Http\Controllers\ExpenseReportController;
+use App\Http\Controllers\FinancialAnalyticsController;
 use App\Http\Controllers\UserPointsController;
 use App\Http\Controllers\ScorePointsSettingController;
 use App\Http\Controllers\UserLevelController;
@@ -333,5 +334,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/monthly', [ExpenseReportController::class, 'getMonthlySummary']); // Monthly summary
         Route::get('/upcoming-recurring', [ExpenseReportController::class, 'getUpcomingRecurring']); // Upcoming recurring
         Route::get('/overdue-recurring', [ExpenseReportController::class, 'getOverdueRecurring']); // Overdue recurring
+    });
+
+    // Financial Analytics routes (Admin & Staff read-only)
+    // Revenue = ended sessions bucketed by ended_at; Expenses = paid expenses
+    // bucketed by COALESCE(paid_at, expense_date). Recurring = fixed, one-off = variable.
+    Route::prefix('financial-analytics')->middleware('admin_or_staff')->group(function () {
+        Route::get('/revenues', [FinancialAnalyticsController::class, 'revenues']);   // Time-series revenue per bucket
+        Route::get('/profits',  [FinancialAnalyticsController::class, 'profits']);    // Time-series operating + net profit per bucket
+        Route::get('/summary',  [FinancialAnalyticsController::class, 'summary']);    // Totals for the range
+        Route::get('/breakdown',[FinancialAnalyticsController::class, 'breakdown']);  // Revenue split + expenses by category
     });
 });
